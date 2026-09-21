@@ -32,8 +32,17 @@ function getDb(): Database {
   if (db) return db;
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error("DATABASE_URL is not set");
-  // Supabase requires TLS; the transaction pooler needs prepared statements off.
-  const client = postgres(url, { prepare: false, max: 1, ssl: "require" });
+  // Supabase requires TLS; the transaction pooler needs prepared statements off
+  // and works best with type-fetching disabled. Short timeouts make a bad
+  // connection fail fast (with a clear error) instead of hanging the request.
+  const client = postgres(url, {
+    prepare: false,
+    max: 1,
+    ssl: "require",
+    fetch_types: false,
+    connect_timeout: 10,
+    idle_timeout: 20,
+  });
   db = drizzle(client, { schema });
   return db;
 }
