@@ -1,0 +1,41 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  /* Cheerful cool-toned sky gradient behind every screen. */
+  background: linear-gradient(160deg, #e0f2fe 0%, #ede9fe 45%, #d1fae5 100%);
+  background-attachment: fixed;
+  min-height: 100%;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Big, tappable, springy buttons for little fingers. */
+.btn-bounce {
+  transition: transform 0.12s ease, box-shadow 0.12s ease, filter 0.12s ease;
+}
+.btn-bounce:active {
+  transform: translateY(3px) scale(0.98);
+  filter: brightness(0.97);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-pop,
+  .animate-floatUp,
+  .animate-wiggle,
+  .animate-shake {
+    animation: none !important;
+  }
+  .btn-bounce {
+    transition: none;
+  }
+}
