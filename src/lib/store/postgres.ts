@@ -1,0 +1,207 @@
+import postgres from "postgres";
+import { drizzle, type PostgresJsDatabase } from "drizzle-orm/postgres-js";
+import { and, eq, gt, gte, sql } from "drizzle-orm";
+import * as schema from "../schema";
+import type {
+  Child,
+  DB,
+  GameSession,
+  LedgerEntry,
+  Prize,
+  Redemption,
+  RedemptionStatus,
+} from "../types";
+import type { Store, Tx } from "./index";
+
+// ---------------------------------------------------------------------------
+// Postgres/Drizzle backend. Activates when DATABASE_URL is set (e.g. a
+// Supabase connection string). Use the pooled ("Transaction") connection
+// string on serverless; `prepare: false` is required for that pooler.
+//
+// NOTE: this backend is code-complete and type-checked but has not yet been
+// run against a live database in this environment — the first Supabase
+// connection is the moment to verify it end to end.
+// ---------------------------------------------------------------------------
+
+type Database = PostgresJsDatabase<typeof schema>;
+type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
+
+let db: Database | null = null;
+
+function getDb(): Database {
+  if (db) return db;
+  const url = process.env.DATABASE_URL;
+  if (!url) throw new Error("DATABASE_URL is not set");
+  const client = postgres(url, { prepare: false, max: 1 });
+  db = drizzle(client, { schema });
+  return db;
+}
+
+const iso = (d: Date | null | undefined): string | undefined =>
+  d ? new Date(d).toISOString() : undefined;
+
+function toChild(r: typeof schema.children.$inferSelect): Child {
+  return {
+    id: r.id,
+    name: r.name,
+    avatar: r.avatar,
+    color: r.color,
+    mathMaxSum: r.mathMaxSum,
+    createdAt: iso(r.createdAt)!,
+  };
+}
+
+function toLedger(r: typeof schema.ledger.$inferSelect): LedgerEntry {
+  return {
+    id: r.id,
+    childId: r.childId,
+    delta: r.delta,
+    reason: r.reason,
+    createdAt: iso(r.createdAt)!,
+  };
+}
+
+function toPrize(r: typeof schema.prizes.$inferSelect): Prize {
+  return { id: r.id, name: r.name, emoji: r.emoji, cost: r.cost, active: r.active };
+}
+
+function toRedemption(r: typeof schema.redemptions.$inferSelect): Redemption {
+  return {
+    id: r.id,
+    childId: r.childId,
+    prizeId: r.prizeId,
+    status: r.status as RedemptionStatus,
+    createdAt: iso(r.createdAt)!,
+    decidedAt: iso(r.decidedAt),
+  };
+}
+
+function toSession(r: typeof schema.sessions.$inferSelect): GameSession {
+  return {
+    id: r.id,
+    childId: r.childId,
+    gameId: r.gameId,
+    questions: r.questions,
+    startedAt: iso(r.startedAt)!,
+    finishedAt: iso(r.finishedAt),
+  };
+}
+
+function startOfToday(): Date {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function makeTx(tx: Transaction): Tx {
+  return {
+    async getChild(id) {
+      const [r] = await tx.select().from(schema.children).where(eq(schema.children.id, id));
+      return r ? toChild(r) : null;
+    },
+    async setChildMaxSum(id, maxSum) {
+      await tx.update(schema.children).set({ mathMaxSum: maxSum }).where(eq(schema.children.id, id));
+    },
+    async addLedger(childId, delta, reason) {
+      await tx.insert(schema.ledger).values({ id: crypto.randomUUID(), childId, delta, reason });
+    },
+    async balance(childId) {
+      const [row] = await tx
+        .select({ total: sql<string>`coalesce(sum(${schema.ledger.delta}), 0)` })
+        .from(schema.ledger)
+        .where(eq(schema.ledger.childId, childId));
+      return Number(row?.total ?? 0);
+    },
+    async earnedToday(childId) {
+      const [row] = await tx
+        .select({ total: sql<string>`coalesce(sum(${schema.ledger.delta}), 0)` })
+        .from(schema.ledger)
+        .where(
+          and(
+            eq(schema.ledger.childId, childId),
+            gt(schema.ledger.delta, 0),
+            gte(schema.ledger.createdAt, startOfToday()),
+          ),
+        );
+      return Number(row?.total ?? 0);
+    },
+    async getSession(id) {
+      const [r] = await tx.select().from(schema.sessions).where(eq(schema.sessions.id, id));
+      return r ? toSession(r) : null;
+    },
+    async addSession(session) {
+      await tx.insert(schema.sessions).values({
+        id: session.id,
+        childId: session.childId,
+        gameId: session.gameId,
+        questions: session.questions,
+        startedAt: new Date(session.startedAt),
+      });
+    },
+    async markSessionFinished(id) {
+      await tx.update(schema.sessions).set({ finishedAt: new Date() }).where(eq(schema.sessions.id, id));
+    },
+    async getPrize(id) {
+      const [r] = await tx.select().from(schema.prizes).where(eq(schema.prizes.id, id));
+      return r ? toPrize(r) : null;
+    },
+    async findPendingRedemption(childId, prizeId) {
+      const [r] = await tx
+        .select()
+        .from(schema.redemptions)
+        .where(
+          and(
+            eq(schema.redemptions.childId, childId),
+            eq(schema.redemptions.prizeId, prizeId),
+            eq(schema.redemptions.status, "pending"),
+          ),
+        )
+        .limit(1);
+      return r ? toRedemption(r) : null;
+    },
+    async getRedemption(id) {
+      const [r] = await tx.select().from(schema.redemptions).where(eq(schema.redemptions.id, id));
+      return r ? toRedemption(r) : null;
+    },
+    async addRedemption(redemption) {
+      await tx.insert(schema.redemptions).values({
+        id: redemption.id,
+        childId: redemption.childId,
+        prizeId: redemption.prizeId,
+        status: redemption.status,
+        createdAt: new Date(redemption.createdAt),
+      });
+    },
+    async setRedemptionStatus(id, status, decidedAt) {
+      await tx
+        .update(schema.redemptions)
+        .set({ status, decidedAt: new Date(decidedAt) })
+        .where(eq(schema.redemptions.id, id));
+    },
+  };
+}
+
+export function createPgStore(): Store {
+  return {
+    async snapshot(): Promise<DB> {
+      const d = getDb();
+      const [children, ledger, prizes, redemptions, sessions] = await Promise.all([
+        d.select().from(schema.children),
+        d.select().from(schema.ledger),
+        d.select().from(schema.prizes),
+        d.select().from(schema.redemptions),
+        d.select().from(schema.sessions),
+      ]);
+      return {
+        children: children.map(toChild),
+        ledger: ledger.map(toLedger),
+        prizes: prizes.map(toPrize),
+        redemptions: redemptions.map(toRedemption),
+        sessions: sessions.map(toSession),
+      };
+    },
+    transaction<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {
+      return getDb().transaction((tx) => fn(makeTx(tx)));
+    },
+  };
+}

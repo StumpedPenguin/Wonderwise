@@ -46,26 +46,49 @@ npm run dev
 Two demo kids (**Fox** 🦊 and **Penguin** 🐧) and a starter prize catalog are
 seeded automatically on first run.
 
-## How data is stored (and what's next)
+## How data is stored
 
-This slice uses a small **file-backed JSON store** (`src/lib/db.ts`) so the
-whole loop persists across requests with zero setup — locally under `.data/`
-(git-ignored), and under `/tmp` on a serverless host.
+There are two interchangeable backends behind one small interface
+(`src/lib/store/`). Screens and server actions don't know or care which is
+running:
 
-> **Note on deploying to Vercel:** serverless instances are stateless and
-> `/tmp` is ephemeral, so the file store is for local play and demos. Durable,
-> shared persistence comes with the Supabase migration below.
+- **File store** (default) — a JSON document under `.data/` locally (or `/tmp`
+  on serverless). Zero setup; great for local dev and demos. Not durable on
+  serverless, since each instance has its own `/tmp`.
+- **Postgres / Drizzle** — activates automatically when `DATABASE_URL` is set.
+  Durable and safe on serverless. This is what a deployed app should use.
 
-Everything goes through the small set of functions in `src/lib/db.ts`, so
-swapping in **Supabase + Drizzle** later is a contained change — the screens
-and game logic don't move. The data shapes in `src/lib/types.ts` are the
-source of truth for that schema.
+### Make it durable (Supabase → Vercel)
+
+1. Create a free project at [supabase.com](https://supabase.com).
+2. Copy the **pooled** ("Transaction") Postgres connection string and set it as
+   `DATABASE_URL` (locally in `.env`, and in your Vercel project settings).
+3. Apply the schema: `npm run db:migrate` (or paste
+   `drizzle/0000_*.sql` into the Supabase SQL editor).
+4. Seed the two kids and prize catalog: run `drizzle/seed.sql` (SQL editor, or
+   `psql "$DATABASE_URL" -f drizzle/seed.sql`).
+
+That's it — redeploy and data is durable. The Drizzle schema
+(`src/lib/schema.ts`) mirrors `src/lib/types.ts`.
+
+> The Postgres backend is code-complete and type-checked but hasn't yet been
+> run against a live database — the first Supabase connection is the moment to
+> verify it end to end.
+
+## Lock the grown-up zone
+
+The `/parent` area is **open by default** (handy for local dev). Set a
+`PARENT_PASSCODE` env var (locally or in Vercel) to require a family passcode;
+the app stores an HMAC-signed, httpOnly cookie — the passcode itself never
+rides in the cookie. Multi-parent login (Supabase Auth / magic links) is a
+later upgrade.
 
 ## Roadmap
 
-- **Stage 0 — Foundations:** Supabase (Postgres + parent auth + image storage),
-  Drizzle schema from `types.ts`, real parent login, editable prize catalog.
-- **Stage 1 — Vertical slice:** ✅ _this commit_.
+- **Stage 0 — Foundations:** ✅ Postgres/Drizzle backend (activate with
+  `DATABASE_URL`), schema + migration, and a passcode-locked grown-up zone.
+  _Still to come:_ editable prize catalog, multi-parent login, image storage.
+- **Stage 1 — Vertical slice:** ✅ the full learn → earn → redeem → approve loop.
 - **Stage 2 — Breadth:** more games, audio everywhere, richer progress.
 - **Stage 3 — AI content:** **owner-only** generation of reading passages and
   writing prompts, with a review queue. The Anthropic API key stays server-side

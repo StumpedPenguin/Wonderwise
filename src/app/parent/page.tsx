@@ -1,11 +1,23 @@
 import Link from "next/link";
 import { readDB, balanceOf } from "@/lib/db";
+import { isParentAuthed, isParentConfigured } from "@/lib/auth";
 import { TokenBadge } from "@/components/TokenBadge";
 import { DecisionButtons } from "@/components/DecisionButtons";
+import { ParentLogin } from "@/components/ParentLogin";
+import { LogoutButton } from "@/components/LogoutButton";
 
 export const dynamic = "force-dynamic";
 
 export default async function ParentPage() {
+  if (!(await isParentAuthed())) {
+    return (
+      <main className="mx-auto flex min-h-full w-full max-w-2xl flex-col px-5 py-8">
+        <ParentLogin />
+      </main>
+    );
+  }
+
+  const locked = isParentConfigured();
   const db = await readDB();
   const childName = (id: string) =>
     db.children.find((c) => c.id === id)?.name ?? "A kid";
@@ -24,10 +36,22 @@ export default async function ParentPage() {
         >
           ← Home
         </Link>
-        <span className="font-display text-lg font-bold text-slate-500">
-          Grown-up zone
-        </span>
+        {locked ? (
+          <LogoutButton />
+        ) : (
+          <span className="font-display text-lg font-bold text-slate-500">
+            Grown-up zone
+          </span>
+        )}
       </div>
+
+      {!locked && (
+        <p className="mt-4 rounded-2xl bg-amber-100 px-4 py-3 text-center text-sm text-amber-800">
+          🔓 This zone is <strong>open</strong>. Set a{" "}
+          <code className="rounded bg-amber-200/60 px-1">PARENT_PASSCODE</code>{" "}
+          env var to lock it with a family passcode.
+        </p>
+      )}
 
       {/* Prize requests to approve */}
       <section className="mt-6">
@@ -112,9 +136,9 @@ export default async function ParentPage() {
       </section>
 
       <p className="mt-8 rounded-2xl bg-white/60 px-4 py-3 text-center text-xs text-slate-400">
-        Coming next: parent login, editing the prize catalog, progress
-        dashboards, and owner-only AI content generation. This grown-up zone is
-        open for now — real accounts arrive in the Foundations stage.
+        Coming next: editing the prize catalog, progress dashboards, and
+        owner-only AI content generation (gated to the owner account, enforced
+        on the server).
       </p>
     </main>
   );

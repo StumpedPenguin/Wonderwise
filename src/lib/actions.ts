@@ -1,12 +1,13 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { mutate, addLedger, balanceOf, earnedTodayOf } from "./db";
+import { transaction } from "./db";
 import { computeAward, nextMaxSum } from "./economy";
 
 // ---------------------------------------------------------------------------
 // Server actions — every state change the client can trigger goes through
 // here, on the server. The client can ask for things; the server decides.
+// Each action runs inside a single atomic transaction.
 // ---------------------------------------------------------------------------
 
 export interface FinishResult {
@@ -19,6 +20,16 @@ export interface FinishResult {
   leveledUp: boolean;
 }
 
+const emptyFinish: FinishResult = {
+  ok: false,
+  correct: 0,
+  total: 0,
+  tokens: 0,
+  newBalance: 0,
+  hitDailyCap: false,
+  leveledUp: false,
+};
+
 /**
  * Grade a finished session and award tokens. The client sends only which
  * choice it picked per question id; correctness is judged against the answer
@@ -28,32 +39,12 @@ export async function finishSession(
   sessionId: string,
   responses: Record<string, number>,
 ): Promise<FinishResult> {
-  return mutate((db) => {
-    const session = db.sessions.find((s) => s.id === sessionId);
-    if (!session || session.finishedAt) {
-      return {
-        ok: false,
-        correct: 0,
-        total: 0,
-        tokens: 0,
-        newBalance: 0,
-        hitDailyCap: false,
-        leveledUp: false,
-      };
-    }
+  return transaction(async (tx) => {
+    const session = await tx.getSession(sessionId);
+    if (!session || session.finishedAt) return emptyFinish;
 
-    const child = db.children.find((c) => c.id === session.childId);
-    if (!child) {
-      return {
-        ok: false,
-        correct: 0,
-        total: 0,
-        tokens: 0,
-        newBalance: 0,
-        hitDailyCap: false,
-        leveledUp: false,
-      };
-    }
+    const child = await tx.getChild(session.childId);
+    if (!child) return emptyFinish;
 
     const total = session.questions.length;
     let correct = 0;
@@ -61,25 +52,25 @@ export async function finishSession(
       if (responses[q.id] === q.answer) correct++;
     }
 
+    const earnedToday = await tx.earnedToday(child.id);
     const award = computeAward({
       correct,
       total,
       maxSum: child.mathMaxSum,
-      earnedToday: earnedTodayOf(db, child.id),
+      earnedToday,
     });
 
     if (award.tokens > 0) {
-      addLedger(db, child.id, award.tokens, "Math session");
+      await tx.addLedger(child.id, award.tokens, "Math session");
     }
 
     // Adaptive difficulty.
     const newMax = nextMaxSum(child.mathMaxSum, award.accuracy);
     const leveledUp = newMax > child.mathMaxSum;
-    child.mathMaxSum = newMax;
+    if (newMax !== child.mathMaxSum) await tx.setChildMaxSum(child.id, newMax);
 
-    session.finishedAt = new Date().toISOString();
-
-    const newBalance = balanceOf(db, child.id);
+    await tx.markSessionFinished(session.id);
+    const newBalance = await tx.balance(child.id);
 
     revalidatePath(`/play/${child.id}`);
 
@@ -105,17 +96,15 @@ export async function requestRedemption(
   childId: string,
   prizeId: string,
 ): Promise<RedeemResult> {
-  return mutate((db) => {
-    const child = db.children.find((c) => c.id === childId);
-    const prize = db.prizes.find((p) => p.id === prizeId);
+  return transaction(async (tx) => {
+    const child = await tx.getChild(childId);
+    const prize = await tx.getPrize(prizeId);
     if (!child || !prize) return { ok: false, message: "Hmm, that prize is gone." };
 
-    const already = db.redemptions.find(
-      (r) => r.childId === childId && r.prizeId === prizeId && r.status === "pending",
-    );
+    const already = await tx.findPendingRedemption(childId, prizeId);
     if (already) return { ok: false, message: "You already asked for this one!" };
 
-    db.redemptions.push({
+    await tx.addRedemption({
       id: crypto.randomUUID(),
       childId,
       prizeId,
@@ -139,21 +128,22 @@ export async function decideRedemption(
   redemptionId: string,
   decision: "approved" | "denied",
 ): Promise<DecisionResult> {
-  return mutate((db) => {
-    const r = db.redemptions.find((x) => x.id === redemptionId);
+  return transaction(async (tx) => {
+    const r = await tx.getRedemption(redemptionId);
     if (!r || r.status !== "pending") return { ok: false, message: "Already handled." };
 
+    const now = new Date().toISOString();
+
     if (decision === "denied") {
-      r.status = "denied";
-      r.decidedAt = new Date().toISOString();
+      await tx.setRedemptionStatus(r.id, "denied", now);
       revalidatePath("/parent");
       return { ok: true, message: "Denied." };
     }
 
-    const prize = db.prizes.find((p) => p.id === r.prizeId);
+    const prize = await tx.getPrize(r.prizeId);
     if (!prize) return { ok: false, message: "Prize no longer exists." };
 
-    const balance = balanceOf(db, r.childId);
+    const balance = await tx.balance(r.childId);
     if (balance < prize.cost) {
       return {
         ok: false,
@@ -161,9 +151,8 @@ export async function decideRedemption(
       };
     }
 
-    addLedger(db, r.childId, -prize.cost, `Redeemed: ${prize.name}`);
-    r.status = "approved";
-    r.decidedAt = new Date().toISOString();
+    await tx.addLedger(r.childId, -prize.cost, `Redeemed: ${prize.name}`);
+    await tx.setRedemptionStatus(r.id, "approved", now);
 
     revalidatePath("/parent");
     revalidatePath(`/play/${r.childId}`);
