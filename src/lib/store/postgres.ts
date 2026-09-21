@@ -191,27 +191,55 @@ function makeTx(tx: Transaction): Tx {
   };
 }
 
+// Hard cap on any single DB operation, so a stalled connection surfaces a
+// readable error fast instead of hanging the whole request.
+const OP_TIMEOUT_MS = 12000;
+
+function withTimeout<T>(p: Promise<T>, label: string): Promise<T> {
+  return Promise.race([
+    p,
+    new Promise<never>((_, reject) =>
+      setTimeout(
+        () =>
+          reject(
+            new Error(
+              `DB ${label} timed out after ${OP_TIMEOUT_MS}ms — the database ` +
+                `did not respond (unreachable, wrong host/port, or blocked).`,
+            ),
+          ),
+        OP_TIMEOUT_MS,
+      ),
+    ),
+  ]);
+}
+
 export function createPgStore(): Store {
   return {
-    async snapshot(): Promise<DB> {
+    snapshot(): Promise<DB> {
       const d = getDb();
-      const [children, ledger, prizes, redemptions, sessions] = await Promise.all([
-        d.select().from(schema.children),
-        d.select().from(schema.ledger),
-        d.select().from(schema.prizes),
-        d.select().from(schema.redemptions),
-        d.select().from(schema.sessions),
-      ]);
-      return {
-        children: children.map(toChild),
-        ledger: ledger.map(toLedger),
-        prizes: prizes.map(toPrize),
-        redemptions: redemptions.map(toRedemption),
-        sessions: sessions.map(toSession),
-      };
+      return withTimeout(
+        (async () => {
+          const [children, ledger, prizes, redemptions, sessions] =
+            await Promise.all([
+              d.select().from(schema.children),
+              d.select().from(schema.ledger),
+              d.select().from(schema.prizes),
+              d.select().from(schema.redemptions),
+              d.select().from(schema.sessions),
+            ]);
+          return {
+            children: children.map(toChild),
+            ledger: ledger.map(toLedger),
+            prizes: prizes.map(toPrize),
+            redemptions: redemptions.map(toRedemption),
+            sessions: sessions.map(toSession),
+          };
+        })(),
+        "read",
+      );
     },
     transaction<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {
-      return getDb().transaction((tx) => fn(makeTx(tx)));
+      return withTimeout(getDb().transaction((tx) => fn(makeTx(tx))), "write");
     },
   };
 }
