@@ -199,6 +199,56 @@ function makeTx(tx: Transaction): Tx {
         .set({ status, decidedAt: new Date(decidedAt) })
         .where(eq(schema.redemptions.id, id));
     },
+    async upsertChild(child) {
+      await tx
+        .insert(schema.children)
+        .values({
+          id: child.id,
+          name: child.name,
+          avatar: child.avatar,
+          color: child.color,
+          mathMaxSum: child.mathMaxSum,
+        })
+        .onConflictDoUpdate({
+          target: schema.children.id,
+          set: {
+            name: child.name,
+            avatar: child.avatar,
+            color: child.color,
+            mathMaxSum: child.mathMaxSum,
+          },
+        });
+    },
+    async deleteChild(id) {
+      await tx.delete(schema.ledger).where(eq(schema.ledger.childId, id));
+      await tx.delete(schema.sessions).where(eq(schema.sessions.childId, id));
+      await tx.delete(schema.redemptions).where(eq(schema.redemptions.childId, id));
+      await tx.delete(schema.children).where(eq(schema.children.id, id));
+    },
+    async upsertPrize(prize) {
+      await tx
+        .insert(schema.prizes)
+        .values({
+          id: prize.id,
+          name: prize.name,
+          emoji: prize.emoji,
+          cost: prize.cost,
+          active: prize.active,
+        })
+        .onConflictDoUpdate({
+          target: schema.prizes.id,
+          set: {
+            name: prize.name,
+            emoji: prize.emoji,
+            cost: prize.cost,
+            active: prize.active,
+          },
+        });
+    },
+    async deletePrize(id) {
+      await tx.delete(schema.redemptions).where(eq(schema.redemptions.prizeId, id));
+      await tx.delete(schema.prizes).where(eq(schema.prizes.id, id));
+    },
   };
 }
 

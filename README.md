@@ -103,7 +103,9 @@ later upgrade.
 
 - **Stage 0 — Foundations:** ✅ Postgres/Drizzle backend (activate with
   `DATABASE_URL`), schema + migration, and a passcode-locked grown-up zone.
-  _Still to come:_ editable prize catalog, multi-parent login, image storage.
+- **Parent admin:** ✅ editable kids (name/avatar/color, add/remove) and an
+  editable prize catalog (name/emoji/cost/active) — all auth-gated on the
+  server. _Still to come:_ multi-parent login, image storage.
 - **Stage 1 — Vertical slice:** ✅ the full learn → earn → redeem → approve loop.
 - **Stage 2 — Breadth:** ✅ four games behind one engine, a game picker, audio
   everywhere, per-game token weighting and adaptive math difficulty.

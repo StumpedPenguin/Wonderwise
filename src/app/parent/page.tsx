@@ -5,6 +5,8 @@ import { TokenBadge } from "@/components/TokenBadge";
 import { DecisionButtons } from "@/components/DecisionButtons";
 import { ParentLogin } from "@/components/ParentLogin";
 import { LogoutButton } from "@/components/LogoutButton";
+import { KidEditor } from "@/components/KidEditor";
+import { PrizeEditor } from "@/components/PrizeEditor";
 
 export const dynamic = "force-dynamic";
 
@@ -114,31 +116,48 @@ export default async function ParentPage() {
         </div>
       </section>
 
-      {/* Prize catalog (read-only in this slice) */}
+      {/* Kids */}
+      <section className="mt-8">
+        <h2 className="font-display text-2xl font-bold text-slate-600">Kids</h2>
+        <p className="mt-1 text-sm text-slate-400">
+          Rename, pick an avatar and color, add or remove.
+        </p>
+        <div className="mt-3">
+          <KidEditor
+            kids={db.children.map((c) => ({
+              id: c.id,
+              name: c.name,
+              avatar: c.avatar,
+              color: c.color,
+            }))}
+          />
+        </div>
+      </section>
+
+      {/* Prize catalog (editable) */}
       <section className="mt-8">
         <h2 className="font-display text-2xl font-bold text-slate-600">
           Prize catalog
         </h2>
-        <ul className="mt-3 flex flex-col gap-2">
-          {db.prizes.map((p) => (
-            <li
-              key={p.id}
-              className="flex items-center justify-between rounded-2xl bg-white/80 px-4 py-3 shadow-sm"
-            >
-              <span className="flex items-center gap-2 text-slate-600">
-                <span className="text-2xl">{p.emoji}</span>
-                {p.name}
-              </span>
-              <TokenBadge amount={p.cost} size="sm" />
-            </li>
-          ))}
-        </ul>
+        <p className="mt-1 text-sm text-slate-400">
+          Set your real prizes and their token costs.
+        </p>
+        <div className="mt-3">
+          <PrizeEditor
+            prizes={db.prizes.map((p) => ({
+              id: p.id,
+              name: p.name,
+              emoji: p.emoji,
+              cost: p.cost,
+              active: p.active,
+            }))}
+          />
+        </div>
       </section>
 
       <p className="mt-8 rounded-2xl bg-white/60 px-4 py-3 text-center text-xs text-slate-400">
-        Coming next: editing the prize catalog, progress dashboards, and
-        owner-only AI content generation (gated to the owner account, enforced
-        on the server).
+        Coming next: a progress dashboard, and owner-only AI content generation
+        (gated to the owner account, enforced on the server).
       </p>
     </main>
   );

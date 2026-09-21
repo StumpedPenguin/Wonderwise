@@ -104,6 +104,26 @@ function makeTx(db: DB): Tx {
         r.decidedAt = decidedAt;
       }
     },
+    async upsertChild(child) {
+      const i = db.children.findIndex((c) => c.id === child.id);
+      if (i === -1) db.children.push(child);
+      else db.children[i] = child;
+    },
+    async deleteChild(id) {
+      db.children = db.children.filter((c) => c.id !== id);
+      db.ledger = db.ledger.filter((e) => e.childId !== id);
+      db.sessions = db.sessions.filter((s) => s.childId !== id);
+      db.redemptions = db.redemptions.filter((r) => r.childId !== id);
+    },
+    async upsertPrize(prize) {
+      const i = db.prizes.findIndex((p) => p.id === prize.id);
+      if (i === -1) db.prizes.push(prize);
+      else db.prizes[i] = prize;
+    },
+    async deletePrize(id) {
+      db.prizes = db.prizes.filter((p) => p.id !== id);
+      db.redemptions = db.redemptions.filter((r) => r.prizeId !== id);
+    },
   };
 }
 

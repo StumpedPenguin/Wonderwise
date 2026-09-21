@@ -47,6 +47,12 @@ export interface Tx {
     status: RedemptionStatus,
     decidedAt: string,
   ): Promise<void>;
+
+  // Parent admin
+  upsertChild(child: Child): Promise<void>;
+  deleteChild(id: string): Promise<void>;
+  upsertPrize(prize: Prize): Promise<void>;
+  deletePrize(id: string): Promise<void>;
 }
 
 export interface Store {
