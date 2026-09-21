@@ -19,7 +19,8 @@ export function difficultyWeight(maxSum: number): number {
 export interface AwardInput {
   correct: number;
   total: number;
-  maxSum: number;
+  /** Difficulty multiplier for this game/level (see difficultyWeight). */
+  weight: number;
   earnedToday: number;
 }
 
@@ -34,11 +35,10 @@ export interface AwardResult {
 export function computeAward({
   correct,
   total,
-  maxSum,
+  weight,
   earnedToday,
 }: AwardInput): AwardResult {
   const accuracy = total > 0 ? correct / total : 0;
-  const weight = difficultyWeight(maxSum);
 
   const gotBonus = accuracy >= ACCURACY_BONUS_BAR;
   const raw = Math.round(correct * BASE_PER_CORRECT * weight) + (gotBonus ? COMPLETION_BONUS : 0);

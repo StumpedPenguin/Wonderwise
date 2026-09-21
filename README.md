@@ -15,9 +15,25 @@ loop proven end to end:
 | Screen | Path | What it does |
 | --- | --- | --- |
 | Profile picker | `/` | Tap your avatar to start (no passwords for kids). |
-| Kid dashboard | `/play/[childId]` | Token wallet + big buttons to play or shop. |
-| Math game | `/play/[childId]/math` | Audio-first add/subtract game; the server grades answers and awards tokens. |
+| Kid dashboard | `/play/[childId]` | Token wallet + a colorful game picker. |
+| Game | `/play/[childId]/game/[gameId]` | Any game; the server generates and grades it and awards tokens. |
 | Prize shop | `/play/[childId]/prizes` | Kid requests a prize; a grown-up must approve. |
+
+### Games
+
+All procedural (free, infinite, safe) and audio-first:
+
+| Game | Skill | How it plays |
+| --- | --- | --- |
+| **Add & Subtract** | Numbers | Multiple-choice add/subtract within the child's level. |
+| **Count & Tap** | Numbers | Count the emojis, tap the number. |
+| **Letter Sounds** | Reading | Hear a letter's sound, tap the letter. |
+| **Build a Word** | Writing | Tap letters to spell a word from its picture. |
+
+Games plug into one registry (`src/lib/games.ts`) — each defines how it
+generates a round, what its answers are worth, and how difficulty adapts.
+Adding a game is one entry there plus (only if it needs a new interaction) a
+branch in `PlayGame`.
 | Grown-up zone | `/parent` | Approve/deny requests, see each kid's wallet and the catalog. |
 
 ### Design choices that matter
@@ -89,7 +105,8 @@ later upgrade.
   `DATABASE_URL`), schema + migration, and a passcode-locked grown-up zone.
   _Still to come:_ editable prize catalog, multi-parent login, image storage.
 - **Stage 1 — Vertical slice:** ✅ the full learn → earn → redeem → approve loop.
-- **Stage 2 — Breadth:** more games, audio everywhere, richer progress.
+- **Stage 2 — Breadth:** ✅ four games behind one engine, a game picker, audio
+  everywhere, per-game token weighting and adaptive math difficulty.
 - **Stage 3 — AI content:** **owner-only** generation of reading passages and
   writing prompts, with a review queue. The Anthropic API key stays server-side
   and the generator is gated to `OWNER_EMAIL` — enforced on the server, so no

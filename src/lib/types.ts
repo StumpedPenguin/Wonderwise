@@ -44,12 +44,20 @@ export interface Redemption {
   decidedAt?: string;
 }
 
+export type QuestionKind = "choice" | "spell";
+
 export interface Question {
   id: string;
-  prompt: string; // e.g. "3 + 4"
-  spoken: string; // e.g. "What is 3 plus 4?"
-  answer: number;
-  choices: number[];
+  kind: QuestionKind;
+  /** Read aloud to the child. */
+  spoken: string;
+  /** The big on-screen prompt: a math expression, a row of emojis, a picture,
+   *  or "🔊" for listen-only games. */
+  promptText: string;
+  /** The canonical correct answer, as a string (e.g. "7", "B", "cat"). */
+  answer: string;
+  /** For "choice": the tappable options. For "spell": the shuffled letter bank. */
+  choices: string[];
 }
 
 export interface GameSession {

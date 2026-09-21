@@ -2,7 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { transaction } from "./db";
-import { computeAward, nextMaxSum } from "./economy";
+import { computeAward } from "./economy";
+import { getGame } from "./games";
 
 // ---------------------------------------------------------------------------
 // Server actions — every state change the client can trigger goes through
@@ -37,7 +38,7 @@ const emptyFinish: FinishResult = {
  */
 export async function finishSession(
   sessionId: string,
-  responses: Record<string, number>,
+  responses: Record<string, string>,
 ): Promise<FinishResult> {
   return transaction(async (tx) => {
     const session = await tx.getSession(sessionId);
@@ -45,6 +46,9 @@ export async function finishSession(
 
     const child = await tx.getChild(session.childId);
     if (!child) return emptyFinish;
+
+    const game = getGame(session.gameId);
+    if (!game) return emptyFinish;
 
     const total = session.questions.length;
     let correct = 0;
@@ -56,18 +60,24 @@ export async function finishSession(
     const award = computeAward({
       correct,
       total,
-      maxSum: child.mathMaxSum,
+      weight: game.weight(child),
       earnedToday,
     });
 
     if (award.tokens > 0) {
-      await tx.addLedger(child.id, award.tokens, "Math session");
+      await tx.addLedger(child.id, award.tokens, `${game.title} session`);
     }
 
-    // Adaptive difficulty.
-    const newMax = nextMaxSum(child.mathMaxSum, award.accuracy);
-    const leveledUp = newMax > child.mathMaxSum;
-    if (newMax !== child.mathMaxSum) await tx.setChildMaxSum(child.id, newMax);
+    // Adaptive difficulty (per game).
+    const updates = game.adapt(child, award.accuracy);
+    const leveledUp =
+      updates.mathMaxSum !== undefined && updates.mathMaxSum > child.mathMaxSum;
+    if (
+      updates.mathMaxSum !== undefined &&
+      updates.mathMaxSum !== child.mathMaxSum
+    ) {
+      await tx.setChildMaxSum(child.id, updates.mathMaxSum);
+    }
 
     await tx.markSessionFinished(session.id);
     const newBalance = await tx.balance(child.id);
