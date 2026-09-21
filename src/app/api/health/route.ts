@@ -22,14 +22,28 @@ function timeoutAfter(ms: number): Promise<never> {
   );
 }
 
+// The host:port we're dialing (no credentials) — reveals pooler vs direct.
+function dbTarget(): string | null {
+  const url = process.env.DATABASE_URL;
+  if (!url) return null;
+  try {
+    const u = new URL(url);
+    return `${u.hostname}:${u.port || "5432"}`;
+  } catch {
+    return "unparseable-DATABASE_URL";
+  }
+}
+
 export async function GET() {
   const backend = process.env.DATABASE_URL ? "postgres" : "file";
+  const target = dbTarget();
   const started = Date.now();
   try {
     const db = await Promise.race([readDB(), timeoutAfter(12000)]);
     return NextResponse.json({
       ok: true,
       backend,
+      target,
       children: db.children.length,
       prizes: db.prizes.length,
       ms: Date.now() - started,
@@ -39,6 +53,7 @@ export async function GET() {
       {
         ok: false,
         backend,
+        target,
         error: e instanceof Error ? e.message : String(e),
         ms: Date.now() - started,
       },
