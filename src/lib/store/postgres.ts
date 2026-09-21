@@ -1,5 +1,16 @@
+import dns from "node:dns";
 import postgres from "postgres";
 import { drizzle, type PostgresJsDatabase } from "drizzle-orm/postgres-js";
+
+// Prefer IPv4 when resolving the database host. Supabase's pooler can resolve
+// to an IPv6 address that serverless functions (e.g. Vercel) often can't route,
+// which shows up as a connection that hangs with no reply. Forcing IPv4-first
+// avoids that black hole. Harmless if the host is already IPv4-only.
+try {
+  dns.setDefaultResultOrder("ipv4first");
+} catch {
+  /* older runtimes may not support this; ignore */
+}
 import { and, eq, gt, gte, sql } from "drizzle-orm";
 import * as schema from "../schema";
 import type {
