@@ -10,23 +10,30 @@ export async function middleware(request: NextRequest) {
 
   let response = NextResponse.next({ request });
 
-  const supabase = createServerClient(url, anon, {
-    cookies: {
-      getAll() {
-        return request.cookies.getAll();
+  try {
+    const supabase = createServerClient(url, anon, {
+      cookies: {
+        getAll() {
+          return request.cookies.getAll();
+        },
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
+          response = NextResponse.next({ request });
+          cookiesToSet.forEach(({ name, value, options }) =>
+            response.cookies.set(name, value, options),
+          );
+        },
       },
-      setAll(cookiesToSet) {
-        cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
-        response = NextResponse.next({ request });
-        cookiesToSet.forEach(({ name, value, options }) =>
-          response.cookies.set(name, value, options),
-        );
-      },
-    },
-  });
+    });
 
-  // Touch the session so it refreshes if needed.
-  await supabase.auth.getUser();
+    // Touch the session so it refreshes if needed. A failure here (network
+    // blip, bad key, Supabase down) must never take down every route with a
+    // 500 — just continue without a refreshed cookie.
+    await supabase.auth.getUser();
+  } catch (err) {
+    console.error("middleware session refresh failed", err);
+    return NextResponse.next({ request });
+  }
   return response;
 }
 
