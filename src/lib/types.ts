@@ -6,6 +6,8 @@
 
 export type Subject = "math" | "reading" | "writing";
 
+export type Difficulty = "easy" | "medium" | "hard";
+
 export interface Child {
   id: string;
   name: string;
@@ -49,6 +51,8 @@ export type QuestionKind = "choice" | "spell" | "trace";
 export interface Question {
   id: string;
   kind: QuestionKind;
+  /** The difficulty this round was played at (drives the token reward). */
+  difficulty: Difficulty;
   /** Read aloud to the child. */
   spoken: string;
   /** The big on-screen prompt: a math expression, a row of emojis, a picture,

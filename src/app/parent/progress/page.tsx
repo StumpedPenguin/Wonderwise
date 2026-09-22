@@ -38,7 +38,6 @@ export default async function ProgressPage() {
             name={child.name}
             avatar={child.avatar}
             color={child.color}
-            level={child.mathMaxSum}
             stats={childStats(db, child.id)}
           />
         ))}
@@ -51,13 +50,11 @@ function ChildCard({
   name,
   avatar,
   color,
-  level,
   stats,
 }: {
   name: string;
   avatar: string;
   color: string;
-  level: number;
   stats: ChildStats;
 }) {
   return (
@@ -70,7 +67,6 @@ function ChildCard({
         </span>
         <div className="flex-1">
           <h2 className="font-display text-2xl font-bold">{name}</h2>
-          <p className="text-sm text-white/90">Math level: sums to {level}</p>
         </div>
         <TokenBadge amount={stats.balance} size="md" />
       </div>

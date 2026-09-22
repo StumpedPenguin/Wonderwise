@@ -3,12 +3,18 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { finishSession, startGame, type FinishResult } from "@/lib/actions";
-import type { Question } from "@/lib/types";
+import type { Difficulty, Question } from "@/lib/types";
 import { accentFor } from "@/lib/theme";
 import { speak } from "@/lib/speak";
 import { TokenBadge } from "./TokenBadge";
 
-type Phase = "loading" | "playing" | "finishing" | "done" | "error";
+type Phase = "choosing" | "loading" | "playing" | "finishing" | "done" | "error";
+
+const LEVELS: { id: Difficulty; label: string; per: number; tone: string }[] = [
+  { id: "easy", label: "Easy", per: 1, tone: "from-emerald-400 to-teal-500" },
+  { id: "medium", label: "Medium", per: 3, tone: "from-amber-400 to-orange-500" },
+  { id: "hard", label: "Hard", per: 5, tone: "from-rose-400 to-pink-500" },
+];
 
 export function PlayGame({
   childId,
@@ -22,7 +28,7 @@ export function PlayGame({
   gameId: string;
 }) {
   const accent = accentFor(color);
-  const [phase, setPhase] = useState<Phase>("loading");
+  const [phase, setPhase] = useState<Phase>("choosing");
   const [index, setIndex] = useState(0);
   const [sessionId, setSessionId] = useState("");
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -31,25 +37,27 @@ export function PlayGame({
 
   const current = questions[index];
 
-  // Fetch the round once, on mount — not in the server render, so a later
-  // revalidation never regenerates it or clears the reward screen.
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const res = await startGame(childId, gameId);
-      if (cancelled) return;
-      if (!res.ok) {
-        setPhase("error");
-        return;
-      }
-      setSessionId(res.sessionId);
-      setQuestions(res.questions);
-      setPhase("playing");
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [childId, gameId]);
+  // Start the round only after a difficulty is picked, and from the client —
+  // so the server render stays pure and a later revalidation never clears the
+  // reward screen.
+  const pick = useCallback(
+    (difficulty: Difficulty) => {
+      setPhase("loading");
+      (async () => {
+        const res = await startGame(childId, gameId, difficulty);
+        if (!res.ok) {
+          setPhase("error");
+          return;
+        }
+        responses.current = {};
+        setSessionId(res.sessionId);
+        setQuestions(res.questions);
+        setIndex(0);
+        setPhase("playing");
+      })();
+    },
+    [childId, gameId],
+  );
 
   useEffect(() => {
     if (phase === "done" && result) {
@@ -89,6 +97,29 @@ export function PlayGame({
     return (
       <div className="grid flex-1 place-items-center text-center">
         <div className="animate-pop text-6xl">✨</div>
+      </div>
+    );
+  }
+  if (phase === "choosing") {
+    return (
+      <div className="flex flex-1 flex-col items-center justify-center gap-5 py-8">
+        <p className="font-display text-3xl font-bold text-slate-600">Pick a level!</p>
+        <div className="grid w-full max-w-sm gap-4">
+          {LEVELS.map((lvl) => (
+            <button
+              key={lvl.id}
+              type="button"
+              onClick={() => pick(lvl.id)}
+              className={`btn-bounce flex items-center justify-between rounded-4xl bg-gradient-to-br ${lvl.tone} px-6 py-5 text-white shadow-lg`}
+            >
+              <span className="font-display text-2xl font-bold">{lvl.label}</span>
+              <span className="inline-flex items-center gap-1 rounded-full bg-white/25 px-3 py-1 font-display font-bold">
+                {lvl.per} 🪙 each
+              </span>
+            </button>
+          ))}
+        </div>
+        <p className="text-sm text-slate-400">Get 80% right to earn your tokens!</p>
       </div>
     );
   }
@@ -473,17 +504,24 @@ function TraceQuestion({
   function done() {
     if (locked.current) return;
     locked.current = true;
+    const pts = drawn.current;
+
     // Recall: how much of the glyph the child covered.
     const R2 = 24 * 24;
     let hits = 0;
     for (const s of samples.current) {
-      if (drawn.current.some((d) => (d.x - s.x) ** 2 + (d.y - s.y) ** 2 <= R2)) hits++;
+      if (pts.some((d) => (d.x - s.x) ** 2 + (d.y - s.y) ** 2 <= R2)) hits++;
     }
     const recall = samples.current.length ? hits / samples.current.length : 0;
 
-    // Precision: how much of their drawing stayed on the glyph (rejects scribbles).
+    // Precision (drawing stayed on the glyph), distinct covered cells, and
+    // path length — together these reject scribbling to fill the letter.
     let onGlyph = 0;
-    for (const d of drawn.current) {
+    let pathLen = 0;
+    const covered = new Set<string>();
+    for (let i = 0; i < pts.length; i++) {
+      const d = pts[i];
+      if (i > 0) pathLen += Math.hypot(d.x - pts[i - 1].x, d.y - pts[i - 1].y);
       const cx = Math.floor(d.x / 6);
       const cy = Math.floor(d.y / 6);
       let near = false;
@@ -492,11 +530,27 @@ function TraceQuestion({
           if (onCells.current.has(`${cx + dx}|${cy + dy}`)) near = true;
         }
       }
-      if (near) onGlyph++;
+      if (near) {
+        onGlyph++;
+        covered.add(`${cx}|${cy}`);
+      }
     }
-    const precision = drawn.current.length ? onGlyph / drawn.current.length : 0;
+    const precision = pts.length ? onGlyph / pts.length : 0;
+    // Overdraw: a clean trace draws roughly the glyph's length; a scribble that
+    // fills the letter draws far more path over the same cells.
+    const overdraw = pathLen / Math.max(covered.size * 6, 1);
 
-    const ok = recall >= 0.45 && precision >= 0.6 && drawn.current.length > 10;
+    const TH = {
+      easy: { recall: 0.4, precision: 0.55, overdraw: 3.4 },
+      medium: { recall: 0.5, precision: 0.65, overdraw: 2.8 },
+      hard: { recall: 0.6, precision: 0.72, overdraw: 2.3 },
+    }[question.difficulty];
+
+    const ok =
+      recall >= TH.recall &&
+      precision >= TH.precision &&
+      overdraw <= TH.overdraw &&
+      pts.length > 12;
     setChecked(ok);
     window.setTimeout(() => onComplete(ok ? "traced" : "miss"), 1200);
   }
@@ -603,29 +657,24 @@ function RewardScreen({
         ))}
 
       <div className="animate-pop rounded-4xl bg-white px-8 py-10 shadow-xl">
-        <div className="text-7xl">{result.tokens > 0 ? "🌟" : "💪"}</div>
+        <div className="text-7xl">{result.passed ? "🌟" : "💪"}</div>
         <h2 className={`mt-3 font-display text-4xl font-bold ${accent.text}`}>
-          {result.tokens > 0 ? "You did it!" : "Nice try!"}
+          {result.passed ? "You did it!" : "So close!"}
         </h2>
         <p className="mt-2 font-display text-2xl text-slate-600">
           {result.correct} / {result.total} correct
         </p>
 
-        <div className="mt-5">
-          <p className="text-slate-500">You earned</p>
-          <div className="mt-1">
-            <TokenBadge amount={result.tokens} size="lg" />
+        {result.passed ? (
+          <div className="mt-5">
+            <p className="text-slate-500">You earned</p>
+            <div className="mt-1">
+              <TokenBadge amount={result.tokens} size="lg" />
+            </div>
           </div>
-        </div>
-
-        {result.leveledUp && (
-          <p className="mt-4 font-display text-lg text-violet-500">
-            ⬆️ Level up! Harder next time.
-          </p>
-        )}
-        {result.hitDailyCap && (
-          <p className="mt-3 text-sm text-slate-400">
-            You've earned lots today — come back tomorrow for more! 🌙
+        ) : (
+          <p className="mt-5 rounded-2xl bg-amber-50 px-4 py-3 font-display text-amber-700">
+            Get 80% right to earn tokens. Try again! 💪
           </p>
         )}
 

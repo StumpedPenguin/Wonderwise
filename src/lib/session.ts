@@ -1,13 +1,14 @@
 import { transaction } from "./db";
 import { getGame } from "./games";
-import type { GameSession } from "./types";
+import type { Difficulty, GameSession } from "./types";
 
-// Starts a new session for a child + game: generates the questions on the
-// SERVER and stores the answer key server-side, so awarding is graded
-// independently of anything the client sends back.
+// Starts a round for a child + game at a difficulty: generates the questions
+// on the SERVER (each tagged with the difficulty) and stores them, so grading
+// and the token reward are decided server-side.
 export async function startSession(
   childId: string,
   gameId: string,
+  difficulty: Difficulty,
 ): Promise<GameSession | null> {
   const game = getGame(gameId);
   if (!game) return null;
@@ -20,7 +21,7 @@ export async function startSession(
       id: crypto.randomUUID(),
       childId,
       gameId,
-      questions: game.generate(child),
+      questions: game.generate(difficulty),
       startedAt: new Date().toISOString(),
     };
 

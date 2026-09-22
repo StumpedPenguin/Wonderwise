@@ -31,10 +31,15 @@ All procedural (free, infinite, safe) and audio-first:
 | **Build a Word** | Writing | Tap letters to spell a 3- or 4-letter word from its picture. |
 | **Tracing** | Writing | Trace a letter or number on a canvas; graded for accuracy, not scribbles. |
 
+Every game has **Easy / Medium / Hard** levels, chosen before each round.
+Difficulty scales the content (number ranges, word length, number of choices,
+tracing strictness) and the reward: **1 / 3 / 5 tokens per correct answer** —
+but only if the child gets **at least 80%** of the round right (otherwise the
+round earns nothing).
+
 Games plug into one registry (`src/lib/games.ts`) — each defines how it
-generates a round, what its answers are worth, and how difficulty adapts.
-Adding a game is one entry there plus (only if it needs a new interaction) a
-branch in `PlayGame`.
+generates a round at a given difficulty. Adding a game is one entry there plus
+(only if it needs a new interaction) a branch in `PlayGame`.
 | Grown-up zone | `/parent` | Approve/deny requests, see each kid's wallet and the catalog. |
 
 ### Design choices that matter

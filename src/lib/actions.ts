@@ -5,7 +5,7 @@ import { transaction } from "./db";
 import { computeAward } from "./economy";
 import { getGame } from "./games";
 import { startSession } from "./session";
-import type { Question } from "./types";
+import type { Difficulty, Question } from "./types";
 
 export interface StartResult {
   ok: boolean;
@@ -20,8 +20,9 @@ export interface StartResult {
 export async function startGame(
   childId: string,
   gameId: string,
+  difficulty: Difficulty,
 ): Promise<StartResult> {
-  const session = await startSession(childId, gameId);
+  const session = await startSession(childId, gameId, difficulty);
   if (!session) return { ok: false, sessionId: "", questions: [] };
   return { ok: true, sessionId: session.id, questions: session.questions };
 }
@@ -38,8 +39,8 @@ export interface FinishResult {
   total: number;
   tokens: number;
   newBalance: number;
-  hitDailyCap: boolean;
-  leveledUp: boolean;
+  passed: boolean;
+  difficulty: Difficulty;
 }
 
 const emptyFinish: FinishResult = {
@@ -48,8 +49,8 @@ const emptyFinish: FinishResult = {
   total: 0,
   tokens: 0,
   newBalance: 0,
-  hitDailyCap: false,
-  leveledUp: false,
+  passed: false,
+  difficulty: "easy",
 };
 
 /**
@@ -77,27 +78,11 @@ export async function finishSession(
       if (responses[q.id] === q.answer) correct++;
     }
 
-    const earnedToday = await tx.earnedToday(child.id);
-    const award = computeAward({
-      correct,
-      total,
-      weight: game.weight(child),
-      earnedToday,
-    });
+    const difficulty: Difficulty = session.questions[0]?.difficulty ?? "easy";
+    const award = computeAward({ correct, total, difficulty });
 
     if (award.tokens > 0) {
-      await tx.addLedger(child.id, award.tokens, `${game.title} session`);
-    }
-
-    // Adaptive difficulty (per game).
-    const updates = game.adapt(child, award.accuracy);
-    const leveledUp =
-      updates.mathMaxSum !== undefined && updates.mathMaxSum > child.mathMaxSum;
-    if (
-      updates.mathMaxSum !== undefined &&
-      updates.mathMaxSum !== child.mathMaxSum
-    ) {
-      await tx.setChildMaxSum(child.id, updates.mathMaxSum);
+      await tx.addLedger(child.id, award.tokens, `${game.title} · ${difficulty}`);
     }
 
     await tx.markSessionFinished(session.id);
@@ -111,8 +96,8 @@ export async function finishSession(
       total,
       tokens: award.tokens,
       newBalance,
-      hitDailyCap: award.hitDailyCap,
-      leveledUp,
+      passed: award.passed,
+      difficulty,
     };
   });
 }

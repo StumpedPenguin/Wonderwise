@@ -1,10 +1,11 @@
-import type { Child, Question, Subject } from "./types";
-import { QUESTIONS_PER_SESSION, difficultyWeight, nextMaxSum } from "./economy";
+import type { Difficulty, Question, Subject } from "./types";
+import { QUESTIONS_PER_SESSION } from "./economy";
 
 // ---------------------------------------------------------------------------
-// Procedural games — free, infinite, instant, and inherently safe.
-// Each game plugs into one registry: it knows how to generate a round, how
-// much its correct answers are worth (weight), and how difficulty adapts.
+// Procedural games — free, infinite, instant, safe. Each game generates a
+// round at the chosen difficulty; difficulty scales the content and (via the
+// economy) the token reward. Every question is tagged with its difficulty so
+// grading and awarding stay server-authoritative.
 // ---------------------------------------------------------------------------
 
 function randInt(min: number, max: number): number {
@@ -23,7 +24,7 @@ function shuffle<T>(arr: T[]): T[] {
 function numberChoices(answer: number, maxSum: number): string[] {
   const set = new Set<number>([answer]);
   let guard = 0;
-  while (set.size < 4 && guard++ < 50) {
+  while (set.size < 4 && guard++ < 60) {
     const delta = randInt(1, 3) * (Math.random() < 0.5 ? -1 : 1);
     const c = answer + delta;
     if (c >= 0 && c <= maxSum + 3) set.add(c);
@@ -35,20 +36,21 @@ function numberChoices(answer: number, maxSum: number): string[] {
 
 // --- Math: add & subtract ---------------------------------------------------
 
-function generateMath(maxSum: number, count: number): Question[] {
+const MATH_MAX: Record<Difficulty, number> = { easy: 5, medium: 10, hard: 20 };
+
+function generateMath(difficulty: Difficulty): Question[] {
+  const maxSum = MATH_MAX[difficulty];
   const out: Question[] = [];
-  for (let i = 0; i < count; i++) {
+  for (let i = 0; i < QUESTIONS_PER_SESSION; i++) {
     const isAdd = Math.random() < 0.55;
     let a: number, b: number, answer: number, promptText: string, spoken: string;
     if (isAdd) {
-      // Both operands >= 1 and answer >= 2 (no +0 and no 0 answers).
       a = randInt(1, Math.max(1, maxSum - 1));
       b = randInt(1, Math.max(1, maxSum - a));
       answer = a + b;
       promptText = `${a} + ${b}`;
       spoken = `What is ${a} plus ${b}?`;
     } else {
-      // a >= 2, 1 <= b <= a-1  → answer between 1 and a-1 (never 0, never −0).
       a = randInt(2, Math.max(2, maxSum));
       b = randInt(1, a - 1);
       answer = a - b;
@@ -58,6 +60,7 @@ function generateMath(maxSum: number, count: number): Question[] {
     out.push({
       id: crypto.randomUUID(),
       kind: "choice",
+      difficulty,
       spoken,
       promptText,
       answer: String(answer),
@@ -80,15 +83,18 @@ const COUNTABLES = [
   { emoji: "🚗", name: "cars" },
 ];
 
-function generateCount(maxSum: number, count: number): Question[] {
-  const cap = Math.min(Math.max(maxSum, 5), 10);
+const COUNT_CAP: Record<Difficulty, number> = { easy: 5, medium: 8, hard: 12 };
+
+function generateCount(difficulty: Difficulty): Question[] {
+  const cap = COUNT_CAP[difficulty];
   const out: Question[] = [];
-  for (let i = 0; i < count; i++) {
+  for (let i = 0; i < QUESTIONS_PER_SESSION; i++) {
     const item = COUNTABLES[randInt(0, COUNTABLES.length - 1)];
     const n = randInt(1, cap);
     out.push({
       id: crypto.randomUUID(),
       kind: "choice",
+      difficulty,
       spoken: `How many ${item.name}? Count them!`,
       promptText: item.emoji.repeat(n),
       answer: String(n),
@@ -115,19 +121,24 @@ const WORDS = [
   { w: "bear", e: "🐻" }, { w: "corn", e: "🌽" }, { w: "leaf", e: "🍃" },
 ];
 
+const ALPHABET = "abcdefghijklmnopqrstuvwxyz".split("");
+
 // --- Read the Word (reading) -----------------------------------------------
 
-function generateReadWord(count: number): Question[] {
-  return shuffle(WORDS)
-    .slice(0, count)
+function generateReadWord(difficulty: Difficulty): Question[] {
+  const len = difficulty === "easy" ? 3 : 4;
+  const nChoices = difficulty === "hard" ? 6 : 4;
+  const pool = WORDS.filter((x) => x.w.length === len);
+  return shuffle(pool)
+    .slice(0, QUESTIONS_PER_SESSION)
     .map(({ w, e }) => {
-      const distractors = shuffle(WORDS.filter((x) => x.w !== w))
-        .slice(0, 3)
+      const distractors = shuffle(pool.filter((x) => x.w !== w))
+        .slice(0, nChoices - 1)
         .map((x) => x.w);
       return {
         id: crypto.randomUUID(),
         kind: "choice" as const,
-        // Say the word aloud; the child reads the options to find the match.
+        difficulty,
         spoken: `Find the word ${w}.`,
         promptText: e,
         answer: w,
@@ -136,40 +147,51 @@ function generateReadWord(count: number): Question[] {
     });
 }
 
-const ALPHABET = "abcdefghijklmnopqrstuvwxyz".split("");
+// --- Build a Word (spelling) ------------------------------------------------
 
-function generateSpell(count: number): Question[] {
-  const picks = shuffle(WORDS).slice(0, count);
-  return picks.map(({ w, e }) => {
-    const bank = w.split("");
-    // add one distractor letter not already in the word
-    let d = ALPHABET[randInt(0, 25)];
-    let guard = 0;
-    while (bank.includes(d) && guard++ < 30) d = ALPHABET[randInt(0, 25)];
-    bank.push(d);
-    return {
-      id: crypto.randomUUID(),
-      kind: "spell" as const,
-      spoken: `Spell the word: ${w}!`,
-      promptText: e,
-      answer: w,
-      choices: shuffle(bank),
-    };
-  });
+function generateSpell(difficulty: Difficulty): Question[] {
+  const len = difficulty === "easy" ? 3 : 4;
+  const extra = difficulty === "hard" ? 2 : 1;
+  const pool = WORDS.filter((x) => x.w.length === len);
+  return shuffle(pool)
+    .slice(0, QUESTIONS_PER_SESSION)
+    .map(({ w, e }) => {
+      const bank = w.split("");
+      for (let k = 0; k < extra; k++) {
+        let d = ALPHABET[randInt(0, 25)];
+        let guard = 0;
+        while (bank.includes(d) && guard++ < 30) d = ALPHABET[randInt(0, 25)];
+        bank.push(d);
+      }
+      return {
+        id: crypto.randomUUID(),
+        kind: "spell" as const,
+        difficulty,
+        spoken: `Spell the word: ${w}!`,
+        promptText: e,
+        answer: w,
+        choices: shuffle(bank),
+      };
+    });
 }
 
 // --- Tracing (handwriting) --------------------------------------------------
 
-const TRACEABLE = "ABCDEFGHJKLMNOPRSTUW".split("").concat("012345678".split(""));
+const TRACE_EASY = "017CLOITU".split("");
+const TRACE_MED = "ABDEFGHJKMNPRS234568".split("");
+const TRACE_HARD = "ABCDEFGHJKLMNOPRSTUW0123456789".split("");
 
-function generateTrace(count: number): Question[] {
-  return shuffle(TRACEABLE)
-    .slice(0, count)
+function generateTrace(difficulty: Difficulty): Question[] {
+  const pool =
+    difficulty === "easy" ? TRACE_EASY : difficulty === "medium" ? TRACE_MED : TRACE_HARD;
+  return shuffle(pool)
+    .slice(0, QUESTIONS_PER_SESSION)
     .map((glyph) => {
       const isLetter = /[A-Z]/.test(glyph);
       return {
         id: crypto.randomUUID(),
         kind: "trace" as const,
+        difficulty,
         spoken: `Trace the ${isLetter ? "letter" : "number"} ${glyph}.`,
         promptText: glyph,
         answer: "traced",
@@ -185,66 +207,16 @@ export interface GameDef {
   subject: Subject;
   title: string;
   emoji: string;
-  /** Tailwind-ish color key used for the card (see theme). */
   color: string;
-  generate: (child: Child) => Question[];
-  /** Token multiplier for this game at the child's current level. */
-  weight: (child: Child) => number;
-  /** Difficulty changes to persist after a round; empty = no change. */
-  adapt: (child: Child, accuracy: number) => { mathMaxSum?: number };
+  generate: (difficulty: Difficulty) => Question[];
 }
 
 export const GAMES: GameDef[] = [
-  {
-    id: "math-add-sub",
-    subject: "math",
-    title: "Add & Subtract",
-    emoji: "➕",
-    color: "sky",
-    generate: (c) => generateMath(c.mathMaxSum, QUESTIONS_PER_SESSION),
-    weight: (c) => difficultyWeight(c.mathMaxSum),
-    adapt: (c, acc) => ({ mathMaxSum: nextMaxSum(c.mathMaxSum, acc) }),
-  },
-  {
-    id: "count-tap",
-    subject: "math",
-    title: "Count & Tap",
-    emoji: "🔢",
-    color: "teal",
-    generate: (c) => generateCount(c.mathMaxSum, QUESTIONS_PER_SESSION),
-    weight: (c) => difficultyWeight(c.mathMaxSum),
-    adapt: (c, acc) => ({ mathMaxSum: nextMaxSum(c.mathMaxSum, acc) }),
-  },
-  {
-    id: "read-the-word",
-    subject: "reading",
-    title: "Read the Word",
-    emoji: "📖",
-    color: "indigo",
-    generate: () => generateReadWord(QUESTIONS_PER_SESSION),
-    weight: () => 1.3,
-    adapt: () => ({}),
-  },
-  {
-    id: "build-a-word",
-    subject: "writing",
-    title: "Build a Word",
-    emoji: "✏️",
-    color: "violet",
-    generate: () => generateSpell(QUESTIONS_PER_SESSION),
-    weight: () => 1.4,
-    adapt: () => ({}),
-  },
-  {
-    id: "tracing",
-    subject: "writing",
-    title: "Tracing",
-    emoji: "✍️",
-    color: "emerald",
-    generate: () => generateTrace(QUESTIONS_PER_SESSION),
-    weight: () => 1.3,
-    adapt: () => ({}),
-  },
+  { id: "math-add-sub", subject: "math", title: "Add & Subtract", emoji: "➕", color: "sky", generate: generateMath },
+  { id: "count-tap", subject: "math", title: "Count & Tap", emoji: "🔢", color: "teal", generate: generateCount },
+  { id: "read-the-word", subject: "reading", title: "Read the Word", emoji: "📖", color: "indigo", generate: generateReadWord },
+  { id: "build-a-word", subject: "writing", title: "Build a Word", emoji: "✏️", color: "violet", generate: generateSpell },
+  { id: "tracing", subject: "writing", title: "Tracing", emoji: "✍️", color: "emerald", generate: generateTrace },
 ];
 
 export function getGame(id: string): GameDef | undefined {
