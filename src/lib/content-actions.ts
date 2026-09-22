@@ -47,11 +47,15 @@ export async function generateContent(count: number): Promise<GenResult> {
     revalidatePath("/parent/content");
     return { ok: true, added: items.length, message: `Generated ${items.length} for review.` };
   } catch (e) {
-    return {
-      ok: false,
-      added: 0,
-      message: e instanceof Error ? e.message : "Generation failed.",
-    };
+    const msg = e instanceof Error ? e.message : "Generation failed.";
+    if (/does not exist|42P01/i.test(msg)) {
+      return {
+        ok: false,
+        added: 0,
+        message: "Database isn't ready — run the content_items migration (drizzle/0001) first.",
+      };
+    }
+    return { ok: false, added: 0, message: msg };
   }
 }
 

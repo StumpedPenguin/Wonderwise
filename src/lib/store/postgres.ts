@@ -126,6 +126,13 @@ function startOfToday(): Date {
   return d;
 }
 
+// True when a query failed because the table doesn't exist yet (e.g. the
+// content_items migration hasn't been applied). Postgres code 42P01.
+function isMissingTable(e: unknown): boolean {
+  const err = e as { code?: string; message?: string };
+  return err?.code === "42P01" || /relation .* does not exist/i.test(err?.message ?? "");
+}
+
 function makeTx(tx: Transaction): Tx {
   return {
     async getChild(id) {
@@ -319,13 +326,19 @@ export function createPgStore(): Store {
       const d = getDb();
       return withTimeout(
         (async () => {
-          const rows = status
-            ? await d
-                .select()
-                .from(schema.contentItems)
-                .where(eq(schema.contentItems.status, status))
-            : await d.select().from(schema.contentItems);
-          return rows.map(toContent);
+          try {
+            const rows = status
+              ? await d
+                  .select()
+                  .from(schema.contentItems)
+                  .where(eq(schema.contentItems.status, status))
+              : await d.select().from(schema.contentItems);
+            return rows.map(toContent);
+          } catch (e) {
+            // Migration 0001 may not be applied yet — treat as no content.
+            if (isMissingTable(e)) return [];
+            throw e;
+          }
         })(),
         "read",
       );

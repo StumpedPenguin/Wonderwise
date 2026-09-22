@@ -28,8 +28,14 @@ export default async function Dashboard({
     (r) => r.childId === child.id && r.status === "pending",
   ).length;
 
-  // Show Read & Answer only once there's approved reading content.
-  const hasReading = (await listContent("approved")).length > 0;
+  // Show Read & Answer only once there's approved reading content. Never let
+  // this break the kids' page (e.g. before the content_items migration runs).
+  let hasReading = false;
+  try {
+    hasReading = (await listContent("approved")).length > 0;
+  } catch {
+    hasReading = false;
+  }
   const games = GAMES.filter((g) => g.id !== "read-answer" || hasReading);
 
   return (
