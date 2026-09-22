@@ -5,6 +5,13 @@ import { createClient } from "@/lib/supabase/client";
 
 export const dynamic = "force-dynamic";
 
+// NEXT_PUBLIC_* vars are inlined into the browser bundle at build time, so a
+// missing value here means the deploy that produced this page was built
+// without the Supabase keys (or before they were added — redeploy needed).
+const configured =
+  !!process.env.NEXT_PUBLIC_SUPABASE_URL &&
+  !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
@@ -13,6 +20,13 @@ export default function LoginPage() {
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    if (!configured) {
+      setError(
+        "Sign-in isn't configured on this deploy yet (missing Supabase keys). " +
+          "Add them in Vercel and redeploy.",
+      );
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -23,8 +37,9 @@ export default function LoginPage() {
       });
       if (error) setError(error.message);
       else setSent(true);
-    } catch {
-      setError("Something went wrong — please try again.");
+    } catch (err) {
+      console.error("signInWithOtp failed", err);
+      setError(err instanceof Error ? err.message : "Something went wrong — please try again.");
     }
     setBusy(false);
   }
@@ -48,6 +63,15 @@ export default function LoginPage() {
         ) : (
           <>
             <p className="mt-2 text-slate-500">Grown-up sign in</p>
+            {!configured && (
+              <p className="mt-4 rounded-2xl bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                🔑 Sign-in isn't turned on for this deploy yet. Add{" "}
+                <code className="rounded bg-amber-100 px-1">NEXT_PUBLIC_SUPABASE_URL</code>{" "}
+                and{" "}
+                <code className="rounded bg-amber-100 px-1">NEXT_PUBLIC_SUPABASE_ANON_KEY</code>{" "}
+                in Vercel, then redeploy.
+              </p>
+            )}
             <form onSubmit={submit} className="mt-6 flex flex-col gap-3">
               <input
                 id="email"
