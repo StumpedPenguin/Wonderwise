@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { readDB, balanceOf } from "@/lib/db";
-import { currentFamilyId } from "@/lib/family";
+import { requireFamily } from "@/lib/family";
 import { TokenBadge } from "@/components/TokenBadge";
 import { PrizeCard } from "@/components/PrizeCard";
 import { ClaimButton } from "@/components/ClaimButton";
@@ -14,7 +14,7 @@ export default async function PrizesPage({
   params: Promise<{ childId: string }>;
 }) {
   const { childId } = await params;
-  const db = await readDB(await currentFamilyId());
+  const db = await readDB(await requireFamily());
   const child = db.children.find((c) => c.id === childId);
   if (!child) notFound();
 

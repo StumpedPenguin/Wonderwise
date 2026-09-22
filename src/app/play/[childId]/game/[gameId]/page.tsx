@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { getChild } from "@/lib/db";
-import { currentFamilyId } from "@/lib/family";
+import { requireFamily } from "@/lib/family";
 import { getGame } from "@/lib/games";
 import { PlayGame } from "@/components/PlayGame";
 
@@ -14,7 +14,7 @@ export default async function GamePage({
 }) {
   const { childId, gameId } = await params;
 
-  const child = await getChild(await currentFamilyId(), childId);
+  const child = await getChild(await requireFamily(), childId);
   const game = getGame(gameId);
   if (!child || !game) notFound();
 

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { readDB, balanceOf, listContent } from "@/lib/db";
-import { currentFamilyId } from "@/lib/family";
+import { requireFamily } from "@/lib/family";
 import { gradientFor, accentFor } from "@/lib/theme";
 import { GAMES } from "@/lib/games";
 import { TokenBadge } from "@/components/TokenBadge";
@@ -20,7 +20,7 @@ export default async function Dashboard({
   params: Promise<{ childId: string }>;
 }) {
   const { childId } = await params;
-  const familyId = await currentFamilyId();
+  const familyId = await requireFamily();
   const db = await readDB(familyId);
   const child = db.children.find((c) => c.id === childId);
   if (!child) notFound();

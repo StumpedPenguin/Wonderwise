@@ -1,27 +1,18 @@
 import Link from "next/link";
 import { readDB, balanceOf } from "@/lib/db";
-import { currentFamilyId } from "@/lib/family";
-import { isParentAuthed, isParentConfigured } from "@/lib/auth";
+import { requireFamily, authConfigured } from "@/lib/family";
 import { TokenBadge } from "@/components/TokenBadge";
 import { DecisionButtons } from "@/components/DecisionButtons";
-import { ParentLogin } from "@/components/ParentLogin";
-import { LogoutButton } from "@/components/LogoutButton";
+import { SignOutButton } from "@/components/SignOutButton";
 import { KidEditor } from "@/components/KidEditor";
 import { PrizeEditor } from "@/components/PrizeEditor";
 
 export const dynamic = "force-dynamic";
 
 export default async function ParentPage() {
-  if (!(await isParentAuthed())) {
-    return (
-      <main className="mx-auto flex min-h-full w-full max-w-2xl flex-col px-5 py-8">
-        <ParentLogin />
-      </main>
-    );
-  }
-
-  const locked = isParentConfigured();
-  const db = await readDB(await currentFamilyId());
+  const familyId = await requireFamily();
+  const signedIn = authConfigured();
+  const db = await readDB(familyId);
   const childName = (id: string) =>
     db.children.find((c) => c.id === id)?.name ?? "A kid";
   const prizeById = (id: string) => db.prizes.find((p) => p.id === id);
@@ -39,22 +30,14 @@ export default async function ParentPage() {
         >
           ← Home
         </Link>
-        {locked ? (
-          <LogoutButton />
+        {signedIn ? (
+          <SignOutButton />
         ) : (
           <span className="font-display text-lg font-bold text-slate-500">
             Grown-up zone
           </span>
         )}
       </div>
-
-      {!locked && (
-        <p className="mt-4 rounded-2xl bg-amber-100 px-4 py-3 text-center text-sm text-amber-800">
-          🔓 This zone is <strong>open</strong>. Set a{" "}
-          <code className="rounded bg-amber-200/60 px-1">PARENT_PASSCODE</code>{" "}
-          env var to lock it with a family passcode.
-        </p>
-      )}
 
       <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Link

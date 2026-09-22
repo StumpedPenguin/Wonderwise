@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { readDB, balanceOf } from "@/lib/db";
-import { currentFamilyId } from "@/lib/family";
+import { requireFamily } from "@/lib/family";
 import type { DB } from "@/lib/types";
 import { gradientFor } from "@/lib/theme";
 import { TokenBadge } from "@/components/TokenBadge";
@@ -8,10 +8,11 @@ import { TokenBadge } from "@/components/TokenBadge";
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
+  const familyId = await requireFamily();
   let db: DB | null = null;
   let loadError: string | null = null;
   try {
-    db = await readDB(await currentFamilyId());
+    db = await readDB(familyId);
   } catch (e) {
     loadError = e instanceof Error ? e.message : String(e);
   }
@@ -43,6 +44,20 @@ export default async function Home() {
               {loadError}
             </pre>
           )}
+        </section>
+      ) : db.children.length === 0 ? (
+        <section className="mt-10 rounded-4xl bg-white p-8 text-center shadow-lg">
+          <div className="text-5xl">👶</div>
+          <h2 className="mt-3 font-display text-2xl font-bold text-slate-700">
+            No kids yet
+          </h2>
+          <p className="mt-2 text-slate-500">Add your kids in the grown-up zone.</p>
+          <Link
+            href="/parent"
+            className="btn-bounce mt-5 inline-block rounded-full bg-sky-500 px-6 py-3 font-display text-lg font-bold text-white shadow-md"
+          >
+            👋 Go to Grown-ups
+          </Link>
         </section>
       ) : (
         <section className="mt-10 grid grid-cols-1 gap-5 sm:grid-cols-2">

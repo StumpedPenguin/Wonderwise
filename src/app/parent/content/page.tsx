@@ -1,8 +1,6 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import { listContent } from "@/lib/db";
-import { currentFamilyId } from "@/lib/family";
-import { isParentAuthed } from "@/lib/auth";
+import { requireFamily } from "@/lib/family";
 import { aiConfigured } from "@/lib/ai";
 import { GenerateButton } from "@/components/GenerateButton";
 import { ContentReviewButtons } from "@/components/ContentReviewButtons";
@@ -11,9 +9,7 @@ import type { ContentItem } from "@/lib/types";
 export const dynamic = "force-dynamic";
 
 export default async function ContentStudio() {
-  if (!(await isParentAuthed())) redirect("/parent");
-
-  const familyId = await currentFamilyId();
+  const familyId = await requireFamily();
   const [pending, approved] = await Promise.all([
     listContent(familyId, "pending"),
     listContent(familyId, "approved"),
