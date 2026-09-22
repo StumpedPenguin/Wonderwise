@@ -39,12 +39,17 @@ const config: Config = {
           "25%": { transform: "translateX(-6px)" },
           "75%": { transform: "translateX(6px)" },
         },
+        confetti: {
+          "0%": { transform: "translateY(0) rotate(0deg)", opacity: "1" },
+          "100%": { transform: "translateY(420px) rotate(540deg)", opacity: "0" },
+        },
       },
       animation: {
         pop: "pop 0.35s cubic-bezier(0.34,1.56,0.64,1)",
         floatUp: "floatUp 1s ease-out forwards",
         wiggle: "wiggle 0.5s ease-in-out",
         shake: "shake 0.4s ease-in-out",
+        confetti: "confetti 1.2s ease-in forwards",
       },
     },
   },

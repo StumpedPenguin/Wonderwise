@@ -157,6 +157,26 @@ function generateSpell(count: number): Question[] {
   });
 }
 
+// --- Tracing (handwriting) --------------------------------------------------
+
+const TRACEABLE = "ABCDEFGHJKLMNOPRSTUW".split("").concat("012345678".split(""));
+
+function generateTrace(count: number): Question[] {
+  return shuffle(TRACEABLE)
+    .slice(0, count)
+    .map((glyph) => {
+      const isLetter = /[A-Z]/.test(glyph);
+      return {
+        id: crypto.randomUUID(),
+        kind: "trace" as const,
+        spoken: `Trace the ${isLetter ? "letter" : "number"} ${glyph}.`,
+        promptText: glyph,
+        answer: "traced",
+        choices: [],
+      };
+    });
+}
+
 // --- Registry ---------------------------------------------------------------
 
 export interface GameDef {
@@ -212,6 +232,16 @@ export const GAMES: GameDef[] = [
     color: "violet",
     generate: () => generateSpell(QUESTIONS_PER_SESSION),
     weight: () => 1.4,
+    adapt: () => ({}),
+  },
+  {
+    id: "tracing",
+    subject: "writing",
+    title: "Tracing",
+    emoji: "✍️",
+    color: "emerald",
+    generate: () => generateTrace(QUESTIONS_PER_SESSION),
+    weight: () => 1.3,
     adapt: () => ({}),
   },
 ];

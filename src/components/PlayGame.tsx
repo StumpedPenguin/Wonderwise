@@ -5,23 +5,10 @@ import Link from "next/link";
 import { finishSession, type FinishResult } from "@/lib/actions";
 import type { Question } from "@/lib/types";
 import { accentFor } from "@/lib/theme";
+import { speak } from "@/lib/speak";
 import { TokenBadge } from "./TokenBadge";
 
 type Phase = "playing" | "finishing" | "done";
-
-function speak(text: string) {
-  try {
-    const synth = window.speechSynthesis;
-    if (!synth) return;
-    synth.cancel();
-    const u = new SpeechSynthesisUtterance(text);
-    u.rate = 0.95;
-    u.pitch = 1.15;
-    synth.speak(u);
-  } catch {
-    /* speech is a nice-to-have */
-  }
-}
 
 export function PlayGame({
   childId,
@@ -98,6 +85,8 @@ export function PlayGame({
 
       {current.kind === "spell" ? (
         <SpellQuestion key={current.id} question={current} accent={accent} onComplete={onComplete} />
+      ) : current.kind === "trace" ? (
+        <TraceQuestion key={current.id} question={current} accent={accent} onComplete={onComplete} />
       ) : (
         <ChoiceQuestion key={current.id} question={current} accent={accent} onComplete={onComplete} />
       )}
@@ -311,6 +300,197 @@ function SpellQuestion({
   );
 }
 
+// --- Tracing question -------------------------------------------------------
+
+const TRACE_SIZE = 300;
+const TRACE_STROKE = "#10b981";
+
+function TraceQuestion({
+  question,
+  accent,
+  onComplete,
+}: {
+  question: Question;
+  accent: ReturnType<typeof accentFor>;
+  onComplete: (value: string) => void;
+}) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const drawn = useRef<{ x: number; y: number }[]>([]);
+  const samples = useRef<{ x: number; y: number }[]>([]);
+  const drawing = useRef(false);
+  const locked = useRef(false);
+  const [checked, setChecked] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    speak(question.spoken);
+  }, [question.spoken]);
+
+  function drawGuide(ctx: CanvasRenderingContext2D) {
+    ctx.clearRect(0, 0, TRACE_SIZE, TRACE_SIZE);
+    ctx.save();
+    ctx.fillStyle = "rgba(100,116,139,0.18)";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.font = "bold 220px system-ui, sans-serif";
+    ctx.fillText(question.promptText, TRACE_SIZE / 2, TRACE_SIZE / 2 + 8);
+    ctx.restore();
+  }
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext("2d");
+    if (!ctx) return;
+    drawGuide(ctx);
+
+    const off = document.createElement("canvas");
+    off.width = TRACE_SIZE;
+    off.height = TRACE_SIZE;
+    const octx = off.getContext("2d");
+    if (octx) {
+      octx.fillStyle = "#000";
+      octx.textAlign = "center";
+      octx.textBaseline = "middle";
+      octx.font = "bold 220px system-ui, sans-serif";
+      octx.fillText(question.promptText, TRACE_SIZE / 2, TRACE_SIZE / 2 + 8);
+      const data = octx.getImageData(0, 0, TRACE_SIZE, TRACE_SIZE).data;
+      const filled: { x: number; y: number }[] = [];
+      for (let y = 0; y < TRACE_SIZE; y += 6) {
+        for (let x = 0; x < TRACE_SIZE; x += 6) {
+          if (data[(y * TRACE_SIZE + x) * 4 + 3] > 128) filled.push({ x, y });
+        }
+      }
+      for (let i = filled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [filled[i], filled[j]] = [filled[j], filled[i]];
+      }
+      samples.current = filled.slice(0, 50);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [question.promptText]);
+
+  function pos(e: React.PointerEvent<HTMLCanvasElement>) {
+    const c = canvasRef.current!;
+    const r = c.getBoundingClientRect();
+    return {
+      x: ((e.clientX - r.left) * c.width) / r.width,
+      y: ((e.clientY - r.top) * c.height) / r.height,
+    };
+  }
+
+  function paint(a: { x: number; y: number }, b: { x: number; y: number }) {
+    const ctx = canvasRef.current?.getContext("2d");
+    if (!ctx) return;
+    ctx.strokeStyle = TRACE_STROKE;
+    ctx.lineWidth = 18;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+    ctx.stroke();
+  }
+
+  function down(e: React.PointerEvent<HTMLCanvasElement>) {
+    if (locked.current) return;
+    drawing.current = true;
+    const p = pos(e);
+    drawn.current.push(p);
+    paint(p, p);
+  }
+  function moveHandler(e: React.PointerEvent<HTMLCanvasElement>) {
+    if (!drawing.current || locked.current) return;
+    const p = pos(e);
+    const prev = drawn.current[drawn.current.length - 1] ?? p;
+    drawn.current.push(p);
+    paint(prev, p);
+  }
+  function up() {
+    drawing.current = false;
+  }
+
+  function clear() {
+    if (locked.current) return;
+    drawn.current = [];
+    const ctx = canvasRef.current?.getContext("2d");
+    if (ctx) drawGuide(ctx);
+  }
+
+  function done() {
+    if (locked.current) return;
+    locked.current = true;
+    const R2 = 26 * 26;
+    let hits = 0;
+    for (const s of samples.current) {
+      if (drawn.current.some((d) => (d.x - s.x) ** 2 + (d.y - s.y) ** 2 <= R2)) hits++;
+    }
+    const coverage = samples.current.length ? hits / samples.current.length : 0;
+    const ok = coverage >= 0.35 && drawn.current.length > 5;
+    setChecked(ok);
+    window.setTimeout(() => onComplete(ok ? "traced" : "miss"), 1200);
+  }
+
+  return (
+    <>
+      <section className="mt-6 flex flex-col items-center rounded-4xl bg-white px-6 py-6 shadow-lg">
+        <button
+          type="button"
+          onClick={() => speak(question.spoken)}
+          className={`btn-bounce mb-3 inline-flex items-center gap-2 rounded-full ${accent.soft} px-4 py-2 font-display ${accent.text}`}
+        >
+          🔊 Say it again
+        </button>
+        <p className="mb-2 font-display text-lg text-slate-500">
+          Trace it with your finger!
+        </p>
+        <canvas
+          ref={canvasRef}
+          width={TRACE_SIZE}
+          height={TRACE_SIZE}
+          onPointerDown={down}
+          onPointerMove={moveHandler}
+          onPointerUp={up}
+          onPointerLeave={up}
+          style={{ touchAction: "none" }}
+          className={`w-full max-w-[300px] rounded-3xl border-4 ${
+            checked === true
+              ? "border-emerald-400"
+              : checked === false
+                ? "border-amber-300"
+                : "border-slate-100"
+          } bg-slate-50`}
+        />
+        {checked === true && (
+          <p className="mt-3 animate-pop font-display text-xl text-emerald-600">
+            Beautiful! ⭐
+          </p>
+        )}
+        {checked === false && (
+          <p className="mt-3 font-display text-lg text-slate-500">
+            Good try! Trace right over the shape.
+          </p>
+        )}
+      </section>
+
+      <section className="mt-6 flex justify-center gap-3">
+        <button
+          type="button"
+          onClick={clear}
+          className="btn-bounce rounded-full bg-white px-6 py-3 font-display text-lg font-bold text-slate-500 shadow-md ring-2 ring-slate-100"
+        >
+          ↺ Clear
+        </button>
+        <button
+          type="button"
+          onClick={done}
+          className={`btn-bounce rounded-full ${accent.solid} px-8 py-3 font-display text-lg font-bold text-white shadow-md`}
+        >
+          Done!
+        </button>
+      </section>
+    </>
+  );
+}
+
 // --- Reward screen ----------------------------------------------------------
 
 function RewardScreen({
@@ -325,6 +505,17 @@ function RewardScreen({
   const accent = accentFor(color);
   return (
     <div className="relative grid flex-1 place-items-center overflow-hidden text-center">
+      {result.tokens > 0 &&
+        Array.from({ length: 14 }).map((_, i) => (
+          <span
+            key={`c${i}`}
+            className="pointer-events-none absolute top-0 animate-confetti text-xl"
+            style={{ left: `${(i * 7) % 100}%`, animationDelay: `${(i % 5) * 0.1}s` }}
+            aria-hidden
+          >
+            {["🎉", "⭐", "🎈", "✨", "🍬"][i % 5]}
+          </span>
+        ))}
       {result.tokens > 0 &&
         Array.from({ length: 10 }).map((_, i) => (
           <span

@@ -55,6 +55,13 @@ export default async function ParentPage() {
         </p>
       )}
 
+      <Link
+        href="/parent/progress"
+        className="btn-bounce mt-6 flex items-center justify-center gap-2 rounded-4xl bg-gradient-to-r from-sky-400 to-indigo-400 p-4 font-display text-lg font-bold text-white shadow-md"
+      >
+        📊 See progress
+      </Link>
+
       {/* Prize requests to approve */}
       <section className="mt-6">
         <h1 className="font-display text-3xl font-bold text-sky-600">

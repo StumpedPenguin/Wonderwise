@@ -29,6 +29,7 @@ All procedural (free, infinite, safe) and audio-first:
 | **Count & Tap** | Numbers | Count the emojis, tap the number. |
 | **Letter Sounds** | Reading | Hear a letter's sound, tap the letter. |
 | **Build a Word** | Writing | Tap letters to spell a word from its picture. |
+| **Tracing** | Writing | Trace a letter or number on a canvas with your finger. |
 
 Games plug into one registry (`src/lib/games.ts`) — each defines how it
 generates a round, what its answers are worth, and how difficulty adapts.
@@ -107,8 +108,13 @@ later upgrade.
   editable prize catalog (name/emoji/cost/active) — all auth-gated on the
   server. _Still to come:_ multi-parent login, image storage.
 - **Stage 1 — Vertical slice:** ✅ the full learn → earn → redeem → approve loop.
-- **Stage 2 — Breadth:** ✅ four games behind one engine, a game picker, audio
+- **Stage 2 — Breadth:** ✅ games behind one engine, a game picker, audio
   everywhere, per-game token weighting and adaptive math difficulty.
+- **Parent progress dashboard:** ✅ per-kid balance, earned/spent, games played,
+  a 7-day earning chart, per-game breakdown, and a recent-activity feed
+  (`/parent/progress`).
+- **Stage 4 — Polish:** ✅ Tracing game (canvas), friendlier voice selection,
+  and confetti reward moments.
 - **Stage 3 — AI content:** **owner-only** generation of reading passages and
   writing prompts, with a review queue. The Anthropic API key stays server-side
   and the generator is gated to `OWNER_EMAIL` — enforced on the server, so no
