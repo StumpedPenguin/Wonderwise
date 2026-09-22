@@ -32,5 +32,6 @@ export function seedData(): DB {
     ],
     redemptions: [],
     sessions: [],
+    contentItems: [],
   };
 }

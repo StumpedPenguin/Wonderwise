@@ -46,7 +46,7 @@ export interface Redemption {
   decidedAt?: string;
 }
 
-export type QuestionKind = "choice" | "spell" | "trace";
+export type QuestionKind = "choice" | "spell" | "trace" | "reading";
 
 export interface Question {
   id: string;
@@ -62,6 +62,32 @@ export interface Question {
   answer: string;
   /** For "choice": the tappable options. For "spell": the shuffled letter bank. */
   choices: string[];
+  /** For "reading": the passage to show and read aloud. */
+  passage?: string;
+}
+
+// --- AI reading content -----------------------------------------------------
+
+export type ContentStatus = "pending" | "approved" | "rejected";
+
+export interface ReadingQuestion {
+  q: string;
+  choices: string[];
+  answer: string;
+}
+
+export interface ReadingPayload {
+  title: string;
+  passage: string;
+  questions: ReadingQuestion[];
+}
+
+export interface ContentItem {
+  id: string;
+  type: "reading";
+  status: ContentStatus;
+  payload: ReadingPayload;
+  createdAt: string;
 }
 
 export interface GameSession {
@@ -79,4 +105,5 @@ export interface DB {
   prizes: Prize[];
   redemptions: Redemption[];
   sessions: GameSession[];
+  contentItems: ContentItem[];
 }

@@ -1,5 +1,7 @@
 import type {
   Child,
+  ContentItem,
+  ContentStatus,
   DB,
   GameSession,
   Prize,
@@ -60,6 +62,12 @@ export interface Store {
   snapshot(): Promise<DB>;
   /** Run a set of writes atomically. */
   transaction<T>(fn: (tx: Tx) => Promise<T>): Promise<T>;
+
+  // AI reading content (not part of the gameplay snapshot).
+  listContent(status?: ContentStatus): Promise<ContentItem[]>;
+  addContentItems(items: ContentItem[]): Promise<void>;
+  setContentStatus(id: string, status: ContentStatus): Promise<void>;
+  deleteContent(id: string): Promise<void>;
 }
 
 // --- Pure helpers over a snapshot (used by page components) ----------------

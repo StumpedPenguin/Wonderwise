@@ -217,6 +217,9 @@ export const GAMES: GameDef[] = [
   { id: "read-the-word", subject: "reading", title: "Read the Word", emoji: "📖", color: "indigo", generate: generateReadWord },
   { id: "build-a-word", subject: "writing", title: "Build a Word", emoji: "✏️", color: "violet", generate: generateSpell },
   { id: "tracing", subject: "writing", title: "Tracing", emoji: "✍️", color: "emerald", generate: generateTrace },
+  // Read & Answer is built from approved AI content in startSession, so its
+  // generate() is never called — it's here for the picker, title, and colors.
+  { id: "read-answer", subject: "reading", title: "Read & Answer", emoji: "📚", color: "sky", generate: () => [] },
 ];
 
 export function getGame(id: string): GameDef | undefined {

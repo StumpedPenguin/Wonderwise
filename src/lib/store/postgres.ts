@@ -15,6 +15,8 @@ import { and, eq, gt, gte, sql } from "drizzle-orm";
 import * as schema from "../schema";
 import type {
   Child,
+  ContentItem,
+  ContentStatus,
   DB,
   GameSession,
   LedgerEntry,
@@ -105,6 +107,16 @@ function toSession(r: typeof schema.sessions.$inferSelect): GameSession {
     questions: r.questions,
     startedAt: iso(r.startedAt)!,
     finishedAt: iso(r.finishedAt),
+  };
+}
+
+function toContent(r: typeof schema.contentItems.$inferSelect): ContentItem {
+  return {
+    id: r.id,
+    type: r.type as "reading",
+    status: r.status as ContentStatus,
+    payload: r.payload,
+    createdAt: iso(r.createdAt)!,
   };
 }
 
@@ -294,6 +306,7 @@ export function createPgStore(): Store {
             prizes: prizes.map(toPrize),
             redemptions: redemptions.map(toRedemption),
             sessions: sessions.map(toSession),
+            contentItems: [], // served via listContent, not the gameplay snapshot
           };
         })(),
         "read",
@@ -301,6 +314,53 @@ export function createPgStore(): Store {
     },
     transaction<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {
       return withTimeout(getDb().transaction((tx) => fn(makeTx(tx))), "write");
+    },
+    listContent(status) {
+      const d = getDb();
+      return withTimeout(
+        (async () => {
+          const rows = status
+            ? await d
+                .select()
+                .from(schema.contentItems)
+                .where(eq(schema.contentItems.status, status))
+            : await d.select().from(schema.contentItems);
+          return rows.map(toContent);
+        })(),
+        "read",
+      );
+    },
+    async addContentItems(items) {
+      if (!items.length) return;
+      await withTimeout(
+        getDb()
+          .insert(schema.contentItems)
+          .values(
+            items.map((i) => ({
+              id: i.id,
+              type: i.type,
+              status: i.status,
+              payload: i.payload,
+              createdAt: new Date(i.createdAt),
+            })),
+          ),
+        "write",
+      );
+    },
+    async setContentStatus(id, status) {
+      await withTimeout(
+        getDb()
+          .update(schema.contentItems)
+          .set({ status })
+          .where(eq(schema.contentItems.id, id)),
+        "write",
+      );
+    },
+    async deleteContent(id) {
+      await withTimeout(
+        getDb().delete(schema.contentItems).where(eq(schema.contentItems.id, id)),
+        "write",
+      );
     },
   };
 }

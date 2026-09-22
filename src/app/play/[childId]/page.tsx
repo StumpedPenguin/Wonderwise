@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { readDB, balanceOf } from "@/lib/db";
+import { readDB, balanceOf, listContent } from "@/lib/db";
 import { gradientFor, accentFor } from "@/lib/theme";
 import { GAMES } from "@/lib/games";
 import { TokenBadge } from "@/components/TokenBadge";
@@ -27,6 +27,10 @@ export default async function Dashboard({
   const pending = db.redemptions.filter(
     (r) => r.childId === child.id && r.status === "pending",
   ).length;
+
+  // Show Read & Answer only once there's approved reading content.
+  const hasReading = (await listContent("approved")).length > 0;
+  const games = GAMES.filter((g) => g.id !== "read-answer" || hasReading);
 
   return (
     <main className="mx-auto flex min-h-full w-full max-w-2xl flex-col px-5 py-8">
@@ -58,7 +62,7 @@ export default async function Dashboard({
         Pick a game
       </h2>
       <section className="mt-3 grid grid-cols-2 gap-4">
-        {GAMES.map((game) => {
+        {games.map((game) => {
           const accent = accentFor(game.color);
           return (
             <Link

@@ -26,7 +26,9 @@ async function ensureFile(): Promise<void> {
 
 async function read(): Promise<DB> {
   await ensureFile();
-  return JSON.parse(await fs.readFile(DB_PATH, "utf8")) as DB;
+  const db = JSON.parse(await fs.readFile(DB_PATH, "utf8")) as DB;
+  if (!db.contentItems) db.contentItems = []; // tolerate older files
+  return db;
 }
 
 async function write(db: DB): Promise<void> {
@@ -127,18 +129,43 @@ function makeTx(db: DB): Tx {
   };
 }
 
+// Serialize a read-modify-write against the file.
+function writeOp<T>(fn: (db: DB) => Promise<T> | T): Promise<T> {
+  const run = queue.then(async () => {
+    const db = await read();
+    const result = await fn(db);
+    await write(db);
+    return result;
+  });
+  queue = run.catch(() => undefined);
+  return run;
+}
+
 export function createFileStore(): Store {
   return {
     snapshot: read,
     transaction<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {
-      const run = queue.then(async () => {
-        const db = await read();
-        const result = await fn(makeTx(db));
-        await write(db);
-        return result;
+      return writeOp((db) => fn(makeTx(db)));
+    },
+    async listContent(status) {
+      const db = await read();
+      return status ? db.contentItems.filter((c) => c.status === status) : db.contentItems;
+    },
+    addContentItems(items) {
+      return writeOp((db) => {
+        db.contentItems.push(...items);
       });
-      queue = run.catch(() => undefined);
-      return run;
+    },
+    setContentStatus(id, status) {
+      return writeOp((db) => {
+        const c = db.contentItems.find((x) => x.id === id);
+        if (c) c.status = status;
+      });
+    },
+    deleteContent(id) {
+      return writeOp((db) => {
+        db.contentItems = db.contentItems.filter((c) => c.id !== id);
+      });
     },
   };
 }

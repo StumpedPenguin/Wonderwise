@@ -30,6 +30,7 @@ All procedural (free, infinite, safe) and audio-first:
 | **Read the Word** | Reading | Hear a word, read the options, tap the matching word. |
 | **Build a Word** | Writing | Tap letters to spell a 3- or 4-letter word from its picture. |
 | **Tracing** | Writing | Trace a letter or number on a canvas; graded for accuracy, not scribbles. |
+| **Read & Answer** | Reading | Read an AI-generated passage and answer questions (appears once content is approved). |
 
 Every game has **Easy / Medium / Hard** levels, chosen before each round.
 Difficulty scales the content (number ranges, word length, number of choices,
@@ -120,6 +121,22 @@ later upgrade.
   (`/parent/progress`).
 - **Stage 4 — Polish:** ✅ Tracing game (canvas), friendlier voice selection,
   and confetti reward moments.
+- **Stage 3 — Owner-only AI content:** ✅ Content Studio (`/parent/content`)
+  generates reading passages with Claude, you review/approve them, and the
+  approved ones feed the kids' Read & Answer game.
+
+### AI reading content (owner-only)
+
+The Content Studio is behind the grown-up gate; the Anthropic key is read only
+by server code and never reaches a browser. To turn it on:
+
+1. Add `ANTHROPIC_API_KEY` (from console.anthropic.com) in Vercel / your `.env`.
+2. Run the `content_items` migration — `npm run db:migrate`, or paste
+   `drizzle/0001_*.sql` into the Supabase SQL editor.
+
+Then generate passages in the Content Studio, approve the good ones, and
+**Read & Answer** appears for the kids. Generation costs pennies (Claude Haiku)
+and never runs while a child is playing.
 - **Stage 3 — AI content:** **owner-only** generation of reading passages and
   writing prompts, with a review queue. The Anthropic API key stays server-side
   and the generator is gated to `OWNER_EMAIL` — enforced on the server, so no

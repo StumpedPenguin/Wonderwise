@@ -55,12 +55,20 @@ export default async function ParentPage() {
         </p>
       )}
 
-      <Link
-        href="/parent/progress"
-        className="btn-bounce mt-6 flex items-center justify-center gap-2 rounded-4xl bg-gradient-to-r from-sky-400 to-indigo-400 p-4 font-display text-lg font-bold text-white shadow-md"
-      >
-        📊 See progress
-      </Link>
+      <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <Link
+          href="/parent/progress"
+          className="btn-bounce flex items-center justify-center gap-2 rounded-4xl bg-gradient-to-r from-sky-400 to-indigo-400 p-4 font-display text-lg font-bold text-white shadow-md"
+        >
+          📊 See progress
+        </Link>
+        <Link
+          href="/parent/content"
+          className="btn-bounce flex items-center justify-center gap-2 rounded-4xl bg-gradient-to-r from-violet-400 to-fuchsia-400 p-4 font-display text-lg font-bold text-white shadow-md"
+        >
+          ✨ Content Studio
+        </Link>
+      </div>
 
       {/* Prize requests to approve */}
       <section className="mt-6">
@@ -162,10 +170,6 @@ export default async function ParentPage() {
         </div>
       </section>
 
-      <p className="mt-8 rounded-2xl bg-white/60 px-4 py-3 text-center text-xs text-slate-400">
-        Coming next: a progress dashboard, and owner-only AI content generation
-        (gated to the owner account, enforced on the server).
-      </p>
     </main>
   );
 }

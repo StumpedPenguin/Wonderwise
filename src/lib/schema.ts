@@ -6,7 +6,7 @@ import {
   timestamp,
   jsonb,
 } from "drizzle-orm/pg-core";
-import type { Question } from "./types";
+import type { Question, ReadingPayload } from "./types";
 
 // Drizzle schema — the source of truth for the Postgres database.
 // Mirrors the shapes in types.ts. Generate SQL with `npm run db:generate`
@@ -53,4 +53,12 @@ export const sessions = pgTable("sessions", {
   questions: jsonb("questions").$type<Question[]>().notNull(),
   startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
   finishedAt: timestamp("finished_at", { withTimezone: true }),
+});
+
+export const contentItems = pgTable("content_items", {
+  id: text("id").primaryKey(),
+  type: text("type").notNull(),
+  status: text("status").notNull(), // "pending" | "approved" | "rejected"
+  payload: jsonb("payload").$type<ReadingPayload>().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });

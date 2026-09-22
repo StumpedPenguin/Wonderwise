@@ -1,4 +1,4 @@
-import type { Child, DB } from "./types";
+import type { Child, ContentItem, ContentStatus, DB } from "./types";
 import { getStore, balanceOf, earnedTodayOf, type Tx } from "./store";
 
 // Thin facade over the active store backend (file or Postgres). Screens and
@@ -20,4 +20,18 @@ export function transaction<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {
 export async function getChild(id: string): Promise<Child | null> {
   const db = await readDB();
   return db.children.find((c) => c.id === id) ?? null;
+}
+
+// AI reading content
+export function listContent(status?: ContentStatus): Promise<ContentItem[]> {
+  return getStore().listContent(status);
+}
+export function addContentItems(items: ContentItem[]): Promise<void> {
+  return getStore().addContentItems(items);
+}
+export function setContentStatus(id: string, status: ContentStatus): Promise<void> {
+  return getStore().setContentStatus(id, status);
+}
+export function deleteContent(id: string): Promise<void> {
+  return getStore().deleteContent(id);
 }

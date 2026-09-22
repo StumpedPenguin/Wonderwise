@@ -166,6 +166,8 @@ export function PlayGame({
         <SpellQuestion key={current.id} question={current} accent={accent} onComplete={onComplete} />
       ) : current.kind === "trace" ? (
         <TraceQuestion key={current.id} question={current} accent={accent} onComplete={onComplete} />
+      ) : current.kind === "reading" ? (
+        <ReadingQuestion key={current.id} question={current} accent={accent} onComplete={onComplete} />
       ) : (
         <ChoiceQuestion key={current.id} question={current} accent={accent} onComplete={onComplete} />
       )}
@@ -376,6 +378,97 @@ function SpellQuestion({
           ⌫ Undo
         </button>
       </div>
+    </>
+  );
+}
+
+// --- Reading (comprehension) question ---------------------------------------
+
+function ReadingQuestion({
+  question,
+  accent,
+  onComplete,
+}: {
+  question: Question;
+  accent: ReturnType<typeof accentFor>;
+  onComplete: (value: string) => void;
+}) {
+  const [chosen, setChosen] = useState<string | null>(null);
+  const locked = useRef(false);
+
+  useEffect(() => {
+    speak(`${question.passage ?? ""}. ${question.spoken}`);
+  }, [question.id, question.passage, question.spoken]);
+
+  const answeredWrong = chosen !== null && chosen !== question.answer;
+  const answeredRight = chosen !== null && chosen === question.answer;
+
+  function choose(value: string) {
+    if (locked.current) return;
+    locked.current = true;
+    setChosen(value);
+    window.setTimeout(() => onComplete(value), 1200);
+  }
+
+  return (
+    <>
+      <section className="mt-6 rounded-4xl bg-white px-6 py-5 shadow-lg">
+        <button
+          type="button"
+          onClick={() => speak(question.passage ?? "")}
+          className={`btn-bounce mb-3 inline-flex items-center gap-2 rounded-full ${accent.soft} px-4 py-2 font-display ${accent.text}`}
+        >
+          🔊 Read the story
+        </button>
+        <p className="font-display text-xl leading-relaxed text-slate-700">
+          {question.passage}
+        </p>
+      </section>
+
+      <section className="mt-4 flex flex-col items-center rounded-4xl bg-white px-6 py-5 shadow-md">
+        <button
+          type="button"
+          onClick={() => speak(question.spoken)}
+          className="btn-bounce mb-2 inline-flex items-center gap-2 rounded-full bg-slate-100 px-4 py-1.5 font-display text-sm text-slate-500"
+        >
+          🔊 Question
+        </button>
+        <p className="text-center font-display text-2xl font-bold text-slate-800">
+          {question.promptText}
+        </p>
+        {answeredWrong && (
+          <p className="mt-3 font-display text-lg text-slate-500">
+            The answer is <span className="text-emerald-600">{question.answer}</span>
+          </p>
+        )}
+        {answeredRight && (
+          <p className="mt-3 animate-pop font-display text-lg text-emerald-600">Yes! 🎉</p>
+        )}
+      </section>
+
+      <section className="mt-4 grid grid-cols-1 gap-3">
+        {question.choices.map((choice) => {
+          const isChosen = chosen === choice;
+          const isAnswer = choice === question.answer;
+          let tone = `bg-white ${accent.text} ring-2 ${accent.ring} hover:brightness-105`;
+          if (chosen !== null) {
+            if (isAnswer) tone = "bg-emerald-400 text-white ring-2 ring-emerald-400";
+            else if (isChosen) tone = "bg-rose-300 text-white ring-2 ring-rose-300";
+            else tone = "bg-white text-slate-300 ring-2 ring-slate-100";
+          }
+          return (
+            <button
+              key={choice}
+              type="button"
+              disabled={chosen !== null}
+              onClick={() => choose(choice)}
+              className={`btn-bounce rounded-3xl px-5 py-4 font-display text-xl font-bold shadow-md ${tone}`}
+            >
+              {choice}
+            </button>
+          );
+        })}
+      </section>
     </>
   );
 }
