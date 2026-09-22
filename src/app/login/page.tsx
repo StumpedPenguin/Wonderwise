@@ -13,8 +13,9 @@ const configured =
   !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
 export default function LoginPage() {
+  const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
-  const [sent, setSent] = useState(false);
+  const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -31,14 +32,29 @@ export default function LoginPage() {
     setError(null);
     try {
       const supabase = createClient();
-      const { error } = await supabase.auth.signInWithOtp({
-        email: email.trim(),
-        options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
-      });
-      if (error) setError(error.message);
-      else setSent(true);
+      const creds = { email: email.trim(), password };
+      const { data, error } =
+        mode === "signup"
+          ? await supabase.auth.signUp(creds)
+          : await supabase.auth.signInWithPassword(creds);
+
+      if (error) {
+        setError(error.message);
+      } else if (mode === "signup" && !data.session) {
+        // No session back on sign-up means Supabase is set to require email
+        // confirmation. Tell the owner how to turn that off (no SMTP needed).
+        setError(
+          "Account made, but this Supabase project is set to require email " +
+            "confirmation. Turn off Authentication → Providers → Email → " +
+            "“Confirm email” in Supabase, then sign in.",
+        );
+      } else {
+        // Signed in. Full navigation so the server re-reads the new cookie and
+        // routes us to /welcome (no family yet) or the home page.
+        window.location.assign("/");
+      }
     } catch (err) {
-      console.error("signInWithOtp failed", err);
+      console.error("auth failed", err);
       setError(err instanceof Error ? err.message : "Something went wrong — please try again.");
     }
     setBusy(false);
@@ -49,53 +65,73 @@ export default function LoginPage() {
       <div className="w-full rounded-4xl bg-white px-8 py-10 text-center shadow-lg">
         <div className="text-5xl">🌟</div>
         <h1 className="mt-2 font-display text-4xl font-bold text-sky-600">Wonderwise</h1>
+        <p className="mt-2 text-slate-500">
+          {mode === "signup" ? "Create a grown-up account" : "Grown-up sign in"}
+        </p>
 
-        {sent ? (
-          <>
-            <div className="mt-6 text-5xl">📬</div>
-            <h2 className="mt-3 font-display text-2xl font-bold text-slate-700">
-              Check your email
-            </h2>
-            <p className="mt-2 text-slate-500">
-              We sent a sign-in link to <strong>{email}</strong>. Tap it to sign in.
-            </p>
-          </>
-        ) : (
-          <>
-            <p className="mt-2 text-slate-500">Grown-up sign in</p>
-            {!configured && (
-              <p className="mt-4 rounded-2xl bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                🔑 Sign-in isn't turned on for this deploy yet. Add{" "}
-                <code className="rounded bg-amber-100 px-1">NEXT_PUBLIC_SUPABASE_URL</code>{" "}
-                and{" "}
-                <code className="rounded bg-amber-100 px-1">NEXT_PUBLIC_SUPABASE_ANON_KEY</code>{" "}
-                in Vercel, then redeploy.
-              </p>
-            )}
-            <form onSubmit={submit} className="mt-6 flex flex-col gap-3">
-              <input
-                id="email"
-                type="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@email.com"
-                className="rounded-2xl border-2 border-slate-200 px-4 py-3 text-center font-display text-lg text-slate-700 outline-none focus:border-sky-400"
-              />
-              <button
-                type="submit"
-                disabled={busy || email.trim().length === 0}
-                className="btn-bounce rounded-full bg-sky-500 px-6 py-3 font-display text-lg font-bold text-white shadow-md disabled:bg-slate-300"
-              >
-                {busy ? "Sending…" : "Email me a link"}
-              </button>
-            </form>
-            {error && <p className="mt-3 text-sm text-rose-500">{error}</p>}
-            <p className="mt-4 text-xs text-slate-400">
-              We'll email you a magic link — no password needed.
-            </p>
-          </>
+        {!configured && (
+          <p className="mt-4 rounded-2xl bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            🔑 Sign-in isn't turned on for this deploy yet. Add{" "}
+            <code className="rounded bg-amber-100 px-1">NEXT_PUBLIC_SUPABASE_URL</code>{" "}
+            and{" "}
+            <code className="rounded bg-amber-100 px-1">NEXT_PUBLIC_SUPABASE_ANON_KEY</code>{" "}
+            in Vercel, then redeploy.
+          </p>
         )}
+
+        <form onSubmit={submit} className="mt-6 flex flex-col gap-3">
+          <input
+            id="email"
+            type="email"
+            autoComplete="email"
+            required
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="you@email.com"
+            className="rounded-2xl border-2 border-slate-200 px-4 py-3 text-center font-display text-lg text-slate-700 outline-none focus:border-sky-400"
+          />
+          <input
+            id="password"
+            type="password"
+            autoComplete={mode === "signup" ? "new-password" : "current-password"}
+            required
+            minLength={6}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="Password"
+            className="rounded-2xl border-2 border-slate-200 px-4 py-3 text-center font-display text-lg text-slate-700 outline-none focus:border-sky-400"
+          />
+          <button
+            type="submit"
+            disabled={busy || email.trim().length === 0 || password.length < 6}
+            className="btn-bounce rounded-full bg-sky-500 px-6 py-3 font-display text-lg font-bold text-white shadow-md disabled:bg-slate-300"
+          >
+            {busy
+              ? "One sec…"
+              : mode === "signup"
+                ? "Create account"
+                : "Sign in"}
+          </button>
+        </form>
+
+        {error && <p className="mt-3 text-sm text-rose-500">{error}</p>}
+
+        <button
+          type="button"
+          onClick={() => {
+            setMode((m) => (m === "signin" ? "signup" : "signin"));
+            setError(null);
+          }}
+          className="mt-5 text-sm font-display font-bold text-sky-500 hover:text-sky-600"
+        >
+          {mode === "signup"
+            ? "Already have an account? Sign in"
+            : "New here? Create an account"}
+        </button>
+
+        <p className="mt-3 text-xs text-slate-400">
+          At least 6 characters. No email needed to sign in.
+        </p>
       </div>
     </main>
   );
