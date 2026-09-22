@@ -1,37 +1,48 @@
-import type { Child, ContentItem, ContentStatus, DB } from "./types";
+import type { Child, ContentItem, ContentStatus, DB, Family } from "./types";
 import { getStore, balanceOf, earnedTodayOf, type Tx } from "./store";
 
-// Thin facade over the active store backend (file or Postgres). Screens and
-// server actions import from here and never care which backend is running.
+// Thin facade over the active store backend (file or Postgres). Everything is
+// scoped by familyId — callers derive it from the request (see lib/family.ts).
 
 export { balanceOf, earnedTodayOf };
 export type { Tx };
 
-/** Read the whole dataset for a page render. */
-export function readDB(): Promise<DB> {
-  return getStore().snapshot();
+/** Read one family's dataset for a page render. */
+export function readDB(familyId: string): Promise<DB> {
+  return getStore().snapshot(familyId);
 }
 
-/** Run a set of writes atomically. */
-export function transaction<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {
-  return getStore().transaction(fn);
+/** Run a set of writes atomically, scoped to one family. */
+export function transaction<T>(familyId: string, fn: (tx: Tx) => Promise<T>): Promise<T> {
+  return getStore().transaction(familyId, fn);
 }
 
-export async function getChild(id: string): Promise<Child | null> {
-  const db = await readDB();
+export async function getChild(familyId: string, id: string): Promise<Child | null> {
+  const db = await readDB(familyId);
   return db.children.find((c) => c.id === id) ?? null;
 }
 
 // AI reading content
-export function listContent(status?: ContentStatus): Promise<ContentItem[]> {
-  return getStore().listContent(status);
+export function listContent(familyId: string, status?: ContentStatus): Promise<ContentItem[]> {
+  return getStore().listContent(familyId, status);
 }
-export function addContentItems(items: ContentItem[]): Promise<void> {
-  return getStore().addContentItems(items);
+export function addContentItems(familyId: string, items: ContentItem[]): Promise<void> {
+  return getStore().addContentItems(familyId, items);
 }
-export function setContentStatus(id: string, status: ContentStatus): Promise<void> {
-  return getStore().setContentStatus(id, status);
+export function setContentStatus(familyId: string, id: string, status: ContentStatus): Promise<void> {
+  return getStore().setContentStatus(familyId, id, status);
 }
-export function deleteContent(id: string): Promise<void> {
-  return getStore().deleteContent(id);
+export function deleteContent(familyId: string, id: string): Promise<void> {
+  return getStore().deleteContent(familyId, id);
+}
+
+// Families
+export function getFamily(id: string): Promise<Family | null> {
+  return getStore().getFamily(id);
+}
+export function getFamilyByOwner(ownerUserId: string): Promise<Family | null> {
+  return getStore().getFamilyByOwner(ownerUserId);
+}
+export function createFamily(family: Family): Promise<void> {
+  return getStore().createFamily(family);
 }

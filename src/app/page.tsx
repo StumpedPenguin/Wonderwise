@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { readDB, balanceOf } from "@/lib/db";
+import { currentFamilyId } from "@/lib/family";
 import type { DB } from "@/lib/types";
 import { gradientFor } from "@/lib/theme";
 import { TokenBadge } from "@/components/TokenBadge";
@@ -10,7 +11,7 @@ export default async function Home() {
   let db: DB | null = null;
   let loadError: string | null = null;
   try {
-    db = await readDB();
+    db = await readDB(await currentFamilyId());
   } catch (e) {
     loadError = e instanceof Error ? e.message : String(e);
   }

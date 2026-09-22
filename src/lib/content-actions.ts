@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { addContentItems, setContentStatus, deleteContent } from "./db";
+import { currentFamilyId } from "./family";
 import { isParentAuthed } from "./auth";
 import { generateReadingBatch, aiConfigured } from "./ai";
 import type { ContentItem } from "./types";
@@ -30,6 +31,7 @@ export async function generateContent(count: number): Promise<GenResult> {
     };
   }
 
+  const familyId = await currentFamilyId();
   const n = Math.min(Math.max(1, Math.round(count) || 3), 5);
   try {
     const payloads = await generateReadingBatch(n);
@@ -38,12 +40,13 @@ export async function generateContent(count: number): Promise<GenResult> {
     }
     const items: ContentItem[] = payloads.map((payload) => ({
       id: crypto.randomUUID(),
+      familyId,
       type: "reading",
       status: "pending",
       payload,
       createdAt: new Date().toISOString(),
     }));
-    await addContentItems(items);
+    await addContentItems(familyId, items);
     revalidatePath("/parent/content");
     return { ok: true, added: items.length, message: `Generated ${items.length} for review.` };
   } catch (e) {
@@ -61,21 +64,21 @@ export async function generateContent(count: number): Promise<GenResult> {
 
 export async function approveContent(id: string): Promise<{ ok: boolean }> {
   if (!(await isParentAuthed())) return { ok: false };
-  await setContentStatus(id, "approved");
+  await setContentStatus(await currentFamilyId(), id, "approved");
   revalidatePath("/parent/content");
   return { ok: true };
 }
 
 export async function rejectContent(id: string): Promise<{ ok: boolean }> {
   if (!(await isParentAuthed())) return { ok: false };
-  await setContentStatus(id, "rejected");
+  await setContentStatus(await currentFamilyId(), id, "rejected");
   revalidatePath("/parent/content");
   return { ok: true };
 }
 
 export async function removeContent(id: string): Promise<{ ok: boolean }> {
   if (!(await isParentAuthed())) return { ok: false };
-  await deleteContent(id);
+  await deleteContent(await currentFamilyId(), id);
   revalidatePath("/parent/content");
   return { ok: true };
 }

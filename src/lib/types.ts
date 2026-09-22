@@ -1,15 +1,21 @@
 // Core data shapes for Wonderwise.
-//
-// In this Stage 1 slice these live in a file-backed JSON store (see db.ts).
-// The same shapes map cleanly onto Postgres tables when we move to Supabase +
-// Drizzle in a later stage — this file becomes the Drizzle schema's source of truth.
 
 export type Subject = "math" | "reading" | "writing";
 
 export type Difficulty = "easy" | "medium" | "hard";
 
+/** A household. Every child/prize/token belongs to exactly one family. */
+export interface Family {
+  id: string;
+  name: string;
+  /** The auth user who owns this family (null for the pre-auth default). */
+  ownerUserId: string | null;
+  createdAt: string;
+}
+
 export interface Child {
   id: string;
+  familyId: string;
   name: string;
   avatar: string; // an emoji, for now
   color: string; // a tailwind gradient pair id, e.g. "sky"
@@ -20,6 +26,7 @@ export interface Child {
 
 export interface LedgerEntry {
   id: string;
+  familyId: string;
   childId: string;
   /** Positive = earned, negative = spent. Balance is the sum of these. */
   delta: number;
@@ -29,6 +36,7 @@ export interface LedgerEntry {
 
 export interface Prize {
   id: string;
+  familyId: string;
   name: string;
   emoji: string;
   cost: number;
@@ -39,6 +47,7 @@ export type RedemptionStatus = "pending" | "approved" | "denied" | "claimed";
 
 export interface Redemption {
   id: string;
+  familyId: string;
   childId: string;
   prizeId: string;
   status: RedemptionStatus;
@@ -84,6 +93,7 @@ export interface ReadingPayload {
 
 export interface ContentItem {
   id: string;
+  familyId: string;
   type: "reading";
   status: ContentStatus;
   payload: ReadingPayload;
@@ -92,6 +102,7 @@ export interface ContentItem {
 
 export interface GameSession {
   id: string;
+  familyId: string;
   childId: string;
   gameId: string;
   questions: Question[];

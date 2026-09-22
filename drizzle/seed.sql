@@ -3,6 +3,10 @@
 --   psql "$DATABASE_URL" -f drizzle/seed.sql
 -- Safe to run more than once (ON CONFLICT DO NOTHING).
 
+insert into families (id, name) values
+  ('family-default', 'My Family')
+on conflict (id) do nothing;
+
 insert into children (id, name, avatar, color, math_max_sum) values
   ('child-fox', 'Fox', '🦊', 'sky', 5),
   ('child-penguin', 'Penguin', '🐧', 'violet', 10)

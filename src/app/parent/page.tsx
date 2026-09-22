@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { readDB, balanceOf } from "@/lib/db";
+import { currentFamilyId } from "@/lib/family";
 import { isParentAuthed, isParentConfigured } from "@/lib/auth";
 import { TokenBadge } from "@/components/TokenBadge";
 import { DecisionButtons } from "@/components/DecisionButtons";
@@ -20,7 +21,7 @@ export default async function ParentPage() {
   }
 
   const locked = isParentConfigured();
-  const db = await readDB();
+  const db = await readDB(await currentFamilyId());
   const childName = (id: string) =>
     db.children.find((c) => c.id === id)?.name ?? "A kid";
   const prizeById = (id: string) => db.prizes.find((p) => p.id === id);

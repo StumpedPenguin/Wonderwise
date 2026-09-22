@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { readDB } from "@/lib/db";
+import { currentFamilyId } from "@/lib/family";
 import { isParentAuthed } from "@/lib/auth";
 import { childStats, type ChildStats } from "@/lib/stats";
 import { gradientFor } from "@/lib/theme";
@@ -11,7 +12,7 @@ export const dynamic = "force-dynamic";
 export default async function ProgressPage() {
   if (!(await isParentAuthed())) redirect("/parent");
 
-  const db = await readDB();
+  const db = await readDB(await currentFamilyId());
 
   return (
     <main className="mx-auto flex min-h-full w-full max-w-2xl flex-col px-5 py-8">

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { readDB } from "@/lib/db";
+import { currentFamilyId } from "@/lib/family";
 
 // Lightweight diagnostic endpoint. Visit /api/health to check whether the app
 // can see DATABASE_URL and read from the database. Guaranteed to answer
@@ -39,7 +40,7 @@ export async function GET() {
   const target = dbTarget();
   const started = Date.now();
   try {
-    const db = await Promise.race([readDB(), timeoutAfter(12000)]);
+    const db = await Promise.race([readDB(await currentFamilyId()), timeoutAfter(12000)]);
     return NextResponse.json({
       ok: true,
       backend,

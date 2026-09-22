@@ -2,10 +2,8 @@ import dns from "node:dns";
 import postgres from "postgres";
 import { drizzle, type PostgresJsDatabase } from "drizzle-orm/postgres-js";
 
-// Prefer IPv4 when resolving the database host. Supabase's pooler can resolve
-// to an IPv6 address that serverless functions (e.g. Vercel) often can't route,
-// which shows up as a connection that hangs with no reply. Forcing IPv4-first
-// avoids that black hole. Harmless if the host is already IPv4-only.
+// Prefer IPv4 when resolving the database host (Supabase's pooler can resolve to
+// an IPv6 address serverless functions can't route). Harmless if already IPv4.
 try {
   dns.setDefaultResultOrder("ipv4first");
 } catch {
@@ -18,6 +16,7 @@ import type {
   ContentItem,
   ContentStatus,
   DB,
+  Family,
   GameSession,
   LedgerEntry,
   Prize,
@@ -27,13 +26,8 @@ import type {
 import type { Store, Tx } from "./index";
 
 // ---------------------------------------------------------------------------
-// Postgres/Drizzle backend. Activates when DATABASE_URL is set (e.g. a
-// Supabase connection string). Use the pooled ("Transaction") connection
-// string on serverless; `prepare: false` is required for that pooler.
-//
-// NOTE: this backend is code-complete and type-checked but has not yet been
-// run against a live database in this environment — the first Supabase
-// connection is the moment to verify it end to end.
+// Postgres/Drizzle backend, scoped by family_id. Activates when DATABASE_URL
+// is set. Requires migration 0002 (family_id columns + families table).
 // ---------------------------------------------------------------------------
 
 type Database = PostgresJsDatabase<typeof schema>;
@@ -45,9 +39,6 @@ function getDb(): Database {
   if (db) return db;
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error("DATABASE_URL is not set");
-  // Supabase requires TLS; the transaction pooler needs prepared statements off
-  // and works best with type-fetching disabled. Short timeouts make a bad
-  // connection fail fast (with a clear error) instead of hanging the request.
   const client = postgres(url, {
     prepare: false,
     max: 1,
@@ -66,6 +57,7 @@ const iso = (d: Date | null | undefined): string | undefined =>
 function toChild(r: typeof schema.children.$inferSelect): Child {
   return {
     id: r.id,
+    familyId: r.familyId,
     name: r.name,
     avatar: r.avatar,
     color: r.color,
@@ -77,6 +69,7 @@ function toChild(r: typeof schema.children.$inferSelect): Child {
 function toLedger(r: typeof schema.ledger.$inferSelect): LedgerEntry {
   return {
     id: r.id,
+    familyId: r.familyId,
     childId: r.childId,
     delta: r.delta,
     reason: r.reason,
@@ -85,12 +78,20 @@ function toLedger(r: typeof schema.ledger.$inferSelect): LedgerEntry {
 }
 
 function toPrize(r: typeof schema.prizes.$inferSelect): Prize {
-  return { id: r.id, name: r.name, emoji: r.emoji, cost: r.cost, active: r.active };
+  return {
+    id: r.id,
+    familyId: r.familyId,
+    name: r.name,
+    emoji: r.emoji,
+    cost: r.cost,
+    active: r.active,
+  };
 }
 
 function toRedemption(r: typeof schema.redemptions.$inferSelect): Redemption {
   return {
     id: r.id,
+    familyId: r.familyId,
     childId: r.childId,
     prizeId: r.prizeId,
     status: r.status as RedemptionStatus,
@@ -102,6 +103,7 @@ function toRedemption(r: typeof schema.redemptions.$inferSelect): Redemption {
 function toSession(r: typeof schema.sessions.$inferSelect): GameSession {
   return {
     id: r.id,
+    familyId: r.familyId,
     childId: r.childId,
     gameId: r.gameId,
     questions: r.questions,
@@ -113,11 +115,16 @@ function toSession(r: typeof schema.sessions.$inferSelect): GameSession {
 function toContent(r: typeof schema.contentItems.$inferSelect): ContentItem {
   return {
     id: r.id,
+    familyId: r.familyId,
     type: r.type as "reading",
     status: r.status as ContentStatus,
     payload: r.payload,
     createdAt: iso(r.createdAt)!,
   };
+}
+
+function toFamily(r: typeof schema.families.$inferSelect): Family {
+  return { id: r.id, name: r.name, ownerUserId: r.ownerUserId, createdAt: iso(r.createdAt)! };
 }
 
 function startOfToday(): Date {
@@ -126,52 +133,62 @@ function startOfToday(): Date {
   return d;
 }
 
-// True when a query failed because the table doesn't exist yet (e.g. the
-// content_items migration hasn't been applied). Postgres code 42P01.
-function isMissingTable(e: unknown): boolean {
+function isMissingRelation(e: unknown): boolean {
   const err = e as { code?: string; message?: string };
-  return err?.code === "42P01" || /relation .* does not exist/i.test(err?.message ?? "");
+  return (
+    err?.code === "42P01" ||
+    err?.code === "42703" ||
+    /relation .* does not exist|column .* does not exist/i.test(err?.message ?? "")
+  );
 }
 
-function makeTx(tx: Transaction): Tx {
+function makeTx(tx: Transaction, familyId: string): Tx {
+  const C = schema.children;
+  const L = schema.ledger;
+  const P = schema.prizes;
+  const R = schema.redemptions;
+  const S = schema.sessions;
+
   return {
     async getChild(id) {
-      const [r] = await tx.select().from(schema.children).where(eq(schema.children.id, id));
+      const [r] = await tx.select().from(C).where(and(eq(C.id, id), eq(C.familyId, familyId)));
       return r ? toChild(r) : null;
     },
     async setChildMaxSum(id, maxSum) {
-      await tx.update(schema.children).set({ mathMaxSum: maxSum }).where(eq(schema.children.id, id));
+      await tx.update(C).set({ mathMaxSum: maxSum }).where(and(eq(C.id, id), eq(C.familyId, familyId)));
     },
     async addLedger(childId, delta, reason) {
-      await tx.insert(schema.ledger).values({ id: crypto.randomUUID(), childId, delta, reason });
+      await tx.insert(L).values({ id: crypto.randomUUID(), familyId, childId, delta, reason });
     },
     async balance(childId) {
       const [row] = await tx
-        .select({ total: sql<string>`coalesce(sum(${schema.ledger.delta}), 0)` })
-        .from(schema.ledger)
-        .where(eq(schema.ledger.childId, childId));
+        .select({ total: sql<string>`coalesce(sum(${L.delta}), 0)` })
+        .from(L)
+        .where(and(eq(L.childId, childId), eq(L.familyId, familyId)));
       return Number(row?.total ?? 0);
     },
     async earnedToday(childId) {
       const [row] = await tx
-        .select({ total: sql<string>`coalesce(sum(${schema.ledger.delta}), 0)` })
-        .from(schema.ledger)
+        .select({ total: sql<string>`coalesce(sum(${L.delta}), 0)` })
+        .from(L)
         .where(
           and(
-            eq(schema.ledger.childId, childId),
-            gt(schema.ledger.delta, 0),
-            gte(schema.ledger.createdAt, startOfToday()),
+            eq(L.childId, childId),
+            eq(L.familyId, familyId),
+            gt(L.delta, 0),
+            gte(L.createdAt, startOfToday()),
           ),
         );
       return Number(row?.total ?? 0);
     },
     async getSession(id) {
-      const [r] = await tx.select().from(schema.sessions).where(eq(schema.sessions.id, id));
+      const [r] = await tx.select().from(S).where(and(eq(S.id, id), eq(S.familyId, familyId)));
       return r ? toSession(r) : null;
     },
     async addSession(session) {
-      await tx.insert(schema.sessions).values({
+      await tx.insert(S).values({
         id: session.id,
+        familyId: session.familyId,
         childId: session.childId,
         gameId: session.gameId,
         questions: session.questions,
@@ -179,33 +196,35 @@ function makeTx(tx: Transaction): Tx {
       });
     },
     async markSessionFinished(id) {
-      await tx.update(schema.sessions).set({ finishedAt: new Date() }).where(eq(schema.sessions.id, id));
+      await tx.update(S).set({ finishedAt: new Date() }).where(and(eq(S.id, id), eq(S.familyId, familyId)));
     },
     async getPrize(id) {
-      const [r] = await tx.select().from(schema.prizes).where(eq(schema.prizes.id, id));
+      const [r] = await tx.select().from(P).where(and(eq(P.id, id), eq(P.familyId, familyId)));
       return r ? toPrize(r) : null;
     },
     async findPendingRedemption(childId, prizeId) {
       const [r] = await tx
         .select()
-        .from(schema.redemptions)
+        .from(R)
         .where(
           and(
-            eq(schema.redemptions.childId, childId),
-            eq(schema.redemptions.prizeId, prizeId),
-            eq(schema.redemptions.status, "pending"),
+            eq(R.familyId, familyId),
+            eq(R.childId, childId),
+            eq(R.prizeId, prizeId),
+            eq(R.status, "pending"),
           ),
         )
         .limit(1);
       return r ? toRedemption(r) : null;
     },
     async getRedemption(id) {
-      const [r] = await tx.select().from(schema.redemptions).where(eq(schema.redemptions.id, id));
+      const [r] = await tx.select().from(R).where(and(eq(R.id, id), eq(R.familyId, familyId)));
       return r ? toRedemption(r) : null;
     },
     async addRedemption(redemption) {
-      await tx.insert(schema.redemptions).values({
+      await tx.insert(R).values({
         id: redemption.id,
+        familyId: redemption.familyId,
         childId: redemption.childId,
         prizeId: redemption.prizeId,
         status: redemption.status,
@@ -214,65 +233,55 @@ function makeTx(tx: Transaction): Tx {
     },
     async setRedemptionStatus(id, status, decidedAt) {
       await tx
-        .update(schema.redemptions)
+        .update(R)
         .set({ status, decidedAt: new Date(decidedAt) })
-        .where(eq(schema.redemptions.id, id));
+        .where(and(eq(R.id, id), eq(R.familyId, familyId)));
     },
     async upsertChild(child) {
       await tx
-        .insert(schema.children)
+        .insert(C)
         .values({
           id: child.id,
+          familyId,
           name: child.name,
           avatar: child.avatar,
           color: child.color,
           mathMaxSum: child.mathMaxSum,
         })
         .onConflictDoUpdate({
-          target: schema.children.id,
-          set: {
-            name: child.name,
-            avatar: child.avatar,
-            color: child.color,
-            mathMaxSum: child.mathMaxSum,
-          },
+          target: C.id,
+          set: { name: child.name, avatar: child.avatar, color: child.color, mathMaxSum: child.mathMaxSum },
         });
     },
     async deleteChild(id) {
-      await tx.delete(schema.ledger).where(eq(schema.ledger.childId, id));
-      await tx.delete(schema.sessions).where(eq(schema.sessions.childId, id));
-      await tx.delete(schema.redemptions).where(eq(schema.redemptions.childId, id));
-      await tx.delete(schema.children).where(eq(schema.children.id, id));
+      await tx.delete(L).where(and(eq(L.childId, id), eq(L.familyId, familyId)));
+      await tx.delete(S).where(and(eq(S.childId, id), eq(S.familyId, familyId)));
+      await tx.delete(R).where(and(eq(R.childId, id), eq(R.familyId, familyId)));
+      await tx.delete(C).where(and(eq(C.id, id), eq(C.familyId, familyId)));
     },
     async upsertPrize(prize) {
       await tx
-        .insert(schema.prizes)
+        .insert(P)
         .values({
           id: prize.id,
+          familyId,
           name: prize.name,
           emoji: prize.emoji,
           cost: prize.cost,
           active: prize.active,
         })
         .onConflictDoUpdate({
-          target: schema.prizes.id,
-          set: {
-            name: prize.name,
-            emoji: prize.emoji,
-            cost: prize.cost,
-            active: prize.active,
-          },
+          target: P.id,
+          set: { name: prize.name, emoji: prize.emoji, cost: prize.cost, active: prize.active },
         });
     },
     async deletePrize(id) {
-      await tx.delete(schema.redemptions).where(eq(schema.redemptions.prizeId, id));
-      await tx.delete(schema.prizes).where(eq(schema.prizes.id, id));
+      await tx.delete(R).where(and(eq(R.prizeId, id), eq(R.familyId, familyId)));
+      await tx.delete(P).where(and(eq(P.id, id), eq(P.familyId, familyId)));
     },
   };
 }
 
-// Hard cap on any single DB operation, so a stalled connection surfaces a
-// readable error fast instead of hanging the whole request.
 const OP_TIMEOUT_MS = 12000;
 
 function withTimeout<T>(p: Promise<T>, label: string): Promise<T> {
@@ -295,55 +304,51 @@ function withTimeout<T>(p: Promise<T>, label: string): Promise<T> {
 
 export function createPgStore(): Store {
   return {
-    snapshot(): Promise<DB> {
+    snapshot(familyId): Promise<DB> {
       const d = getDb();
       return withTimeout(
         (async () => {
-          const [children, ledger, prizes, redemptions, sessions] =
-            await Promise.all([
-              d.select().from(schema.children),
-              d.select().from(schema.ledger),
-              d.select().from(schema.prizes),
-              d.select().from(schema.redemptions),
-              d.select().from(schema.sessions),
-            ]);
+          const [children, ledger, prizes, redemptions, sessions] = await Promise.all([
+            d.select().from(schema.children).where(eq(schema.children.familyId, familyId)),
+            d.select().from(schema.ledger).where(eq(schema.ledger.familyId, familyId)),
+            d.select().from(schema.prizes).where(eq(schema.prizes.familyId, familyId)),
+            d.select().from(schema.redemptions).where(eq(schema.redemptions.familyId, familyId)),
+            d.select().from(schema.sessions).where(eq(schema.sessions.familyId, familyId)),
+          ]);
           return {
             children: children.map(toChild),
             ledger: ledger.map(toLedger),
             prizes: prizes.map(toPrize),
             redemptions: redemptions.map(toRedemption),
             sessions: sessions.map(toSession),
-            contentItems: [], // served via listContent, not the gameplay snapshot
+            contentItems: [], // served via listContent
           };
         })(),
         "read",
       );
     },
-    transaction<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {
-      return withTimeout(getDb().transaction((tx) => fn(makeTx(tx))), "write");
+    transaction<T>(familyId: string, fn: (tx: Tx) => Promise<T>): Promise<T> {
+      return withTimeout(getDb().transaction((tx) => fn(makeTx(tx, familyId))), "write");
     },
-    listContent(status) {
+    listContent(familyId, status) {
       const d = getDb();
       return withTimeout(
         (async () => {
           try {
-            const rows = status
-              ? await d
-                  .select()
-                  .from(schema.contentItems)
-                  .where(eq(schema.contentItems.status, status))
-              : await d.select().from(schema.contentItems);
+            const where = status
+              ? and(eq(schema.contentItems.familyId, familyId), eq(schema.contentItems.status, status))
+              : eq(schema.contentItems.familyId, familyId);
+            const rows = await d.select().from(schema.contentItems).where(where);
             return rows.map(toContent);
           } catch (e) {
-            // Migration 0001 may not be applied yet — treat as no content.
-            if (isMissingTable(e)) return [];
+            if (isMissingRelation(e)) return [];
             throw e;
           }
         })(),
         "read",
       );
     },
-    async addContentItems(items) {
+    async addContentItems(_familyId, items) {
       if (!items.length) return;
       await withTimeout(
         getDb()
@@ -351,6 +356,7 @@ export function createPgStore(): Store {
           .values(
             items.map((i) => ({
               id: i.id,
+              familyId: i.familyId,
               type: i.type,
               status: i.status,
               payload: i.payload,
@@ -360,18 +366,65 @@ export function createPgStore(): Store {
         "write",
       );
     },
-    async setContentStatus(id, status) {
+    async setContentStatus(familyId, id, status) {
       await withTimeout(
         getDb()
           .update(schema.contentItems)
           .set({ status })
-          .where(eq(schema.contentItems.id, id)),
+          .where(and(eq(schema.contentItems.id, id), eq(schema.contentItems.familyId, familyId))),
         "write",
       );
     },
-    async deleteContent(id) {
+    async deleteContent(familyId, id) {
       await withTimeout(
-        getDb().delete(schema.contentItems).where(eq(schema.contentItems.id, id)),
+        getDb()
+          .delete(schema.contentItems)
+          .where(and(eq(schema.contentItems.id, id), eq(schema.contentItems.familyId, familyId))),
+        "write",
+      );
+    },
+    getFamily(id) {
+      const d = getDb();
+      return withTimeout(
+        (async () => {
+          try {
+            const [r] = await d.select().from(schema.families).where(eq(schema.families.id, id));
+            return r ? toFamily(r) : null;
+          } catch (e) {
+            if (isMissingRelation(e)) return null;
+            throw e;
+          }
+        })(),
+        "read",
+      );
+    },
+    getFamilyByOwner(ownerUserId) {
+      const d = getDb();
+      return withTimeout(
+        (async () => {
+          try {
+            const [r] = await d
+              .select()
+              .from(schema.families)
+              .where(eq(schema.families.ownerUserId, ownerUserId))
+              .limit(1);
+            return r ? toFamily(r) : null;
+          } catch (e) {
+            if (isMissingRelation(e)) return null;
+            throw e;
+          }
+        })(),
+        "read",
+      );
+    },
+    async createFamily(family) {
+      await withTimeout(
+        getDb().insert(schema.families).values({
+          id: family.id,
+          name: family.name,
+          ownerUserId: family.ownerUserId,
+          createdAt: new Date(family.createdAt),
+        }),
         "write",
       );
     },

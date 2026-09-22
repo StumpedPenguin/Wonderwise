@@ -15,6 +15,13 @@
       "when": 1790092622756,
       "tag": "0001_even_alex_wilder",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1790107417861,
+      "tag": "0002_vengeful_northstar",
+      "breakpoints": true
     }
   ]
 }

@@ -1,136 +1,49 @@
 import { promises as fs } from "fs";
 import path from "path";
-import type { DB, RedemptionStatus } from "../types";
-import { seedData } from "../seed";
+import type { DB, Family, RedemptionStatus } from "../types";
+import { seedData, seedFamily } from "../seed";
 import type { Store, Tx } from "./index";
 
 // ---------------------------------------------------------------------------
 // File-backed store: a single JSON document, edited under an in-process lock.
-// Great for local dev and demos with zero setup. Not durable on serverless
-// (each instance has its own /tmp) — that's what the Postgres backend is for.
+// Everything is scoped by familyId, matching the Postgres backend.
 // ---------------------------------------------------------------------------
+
+type FileDB = DB & { families: Family[] };
 
 const isServerless = !!process.env.VERCEL || process.env.NODE_ENV === "production";
 const DB_PATH = isServerless
   ? path.join("/tmp", "wonderwise-db.json")
   : path.join(process.cwd(), ".data", "wonderwise-db.json");
 
+function initial(): FileDB {
+  return { ...seedData(), families: [seedFamily()] };
+}
+
 async function ensureFile(): Promise<void> {
   try {
     await fs.access(DB_PATH);
   } catch {
     await fs.mkdir(path.dirname(DB_PATH), { recursive: true });
-    await fs.writeFile(DB_PATH, JSON.stringify(seedData(), null, 2), "utf8");
+    await fs.writeFile(DB_PATH, JSON.stringify(initial(), null, 2), "utf8");
   }
 }
 
-async function read(): Promise<DB> {
+async function read(): Promise<FileDB> {
   await ensureFile();
-  const db = JSON.parse(await fs.readFile(DB_PATH, "utf8")) as DB;
-  if (!db.contentItems) db.contentItems = []; // tolerate older files
+  const db = JSON.parse(await fs.readFile(DB_PATH, "utf8")) as FileDB;
+  if (!db.contentItems) db.contentItems = [];
+  if (!db.families || db.families.length === 0) db.families = [seedFamily()];
   return db;
 }
 
-async function write(db: DB): Promise<void> {
+async function write(db: FileDB): Promise<void> {
   await fs.writeFile(DB_PATH, JSON.stringify(db, null, 2), "utf8");
 }
 
-// Serialize mutations so concurrent server actions don't clobber the file.
-let queue: Promise<unknown> = Promise.resolve();
-
-function isToday(iso: string): boolean {
-  return iso.slice(0, 10) === new Date().toISOString().slice(0, 10);
-}
-
-function makeTx(db: DB): Tx {
-  return {
-    async getChild(id) {
-      return db.children.find((c) => c.id === id) ?? null;
-    },
-    async setChildMaxSum(id, maxSum) {
-      const child = db.children.find((c) => c.id === id);
-      if (child) child.mathMaxSum = maxSum;
-    },
-    async addLedger(childId, delta, reason) {
-      db.ledger.push({
-        id: crypto.randomUUID(),
-        childId,
-        delta,
-        reason,
-        createdAt: new Date().toISOString(),
-      });
-    },
-    async balance(childId) {
-      return db.ledger
-        .filter((e) => e.childId === childId)
-        .reduce((s, e) => s + e.delta, 0);
-    },
-    async earnedToday(childId) {
-      return db.ledger
-        .filter((e) => e.childId === childId && e.delta > 0 && isToday(e.createdAt))
-        .reduce((s, e) => s + e.delta, 0);
-    },
-    async getSession(id) {
-      return db.sessions.find((s) => s.id === id) ?? null;
-    },
-    async addSession(session) {
-      db.sessions.push(session);
-    },
-    async markSessionFinished(id) {
-      const s = db.sessions.find((x) => x.id === id);
-      if (s) s.finishedAt = new Date().toISOString();
-    },
-    async getPrize(id) {
-      return db.prizes.find((p) => p.id === id) ?? null;
-    },
-    async findPendingRedemption(childId, prizeId) {
-      return (
-        db.redemptions.find(
-          (r) =>
-            r.childId === childId &&
-            r.prizeId === prizeId &&
-            r.status === "pending",
-        ) ?? null
-      );
-    },
-    async getRedemption(id) {
-      return db.redemptions.find((r) => r.id === id) ?? null;
-    },
-    async addRedemption(redemption) {
-      db.redemptions.push(redemption);
-    },
-    async setRedemptionStatus(id, status: RedemptionStatus, decidedAt) {
-      const r = db.redemptions.find((x) => x.id === id);
-      if (r) {
-        r.status = status;
-        r.decidedAt = decidedAt;
-      }
-    },
-    async upsertChild(child) {
-      const i = db.children.findIndex((c) => c.id === child.id);
-      if (i === -1) db.children.push(child);
-      else db.children[i] = child;
-    },
-    async deleteChild(id) {
-      db.children = db.children.filter((c) => c.id !== id);
-      db.ledger = db.ledger.filter((e) => e.childId !== id);
-      db.sessions = db.sessions.filter((s) => s.childId !== id);
-      db.redemptions = db.redemptions.filter((r) => r.childId !== id);
-    },
-    async upsertPrize(prize) {
-      const i = db.prizes.findIndex((p) => p.id === prize.id);
-      if (i === -1) db.prizes.push(prize);
-      else db.prizes[i] = prize;
-    },
-    async deletePrize(id) {
-      db.prizes = db.prizes.filter((p) => p.id !== id);
-      db.redemptions = db.redemptions.filter((r) => r.prizeId !== id);
-    },
-  };
-}
-
 // Serialize a read-modify-write against the file.
-function writeOp<T>(fn: (db: DB) => Promise<T> | T): Promise<T> {
+let queue: Promise<unknown> = Promise.resolve();
+function writeOp<T>(fn: (db: FileDB) => Promise<T> | T): Promise<T> {
   const run = queue.then(async () => {
     const db = await read();
     const result = await fn(db);
@@ -141,30 +54,158 @@ function writeOp<T>(fn: (db: DB) => Promise<T> | T): Promise<T> {
   return run;
 }
 
+function isToday(iso: string): boolean {
+  return iso.slice(0, 10) === new Date().toISOString().slice(0, 10);
+}
+
+/** A family-scoped view of the gameplay tables (no families array). */
+function scopedSnapshot(db: FileDB, familyId: string): DB {
+  const f = (x: { familyId: string }) => x.familyId === familyId;
+  return {
+    children: db.children.filter(f),
+    ledger: db.ledger.filter(f),
+    prizes: db.prizes.filter(f),
+    redemptions: db.redemptions.filter(f),
+    sessions: db.sessions.filter(f),
+    contentItems: db.contentItems.filter(f),
+  };
+}
+
+function makeTx(db: FileDB, familyId: string): Tx {
+  const inFamily = (x: { familyId: string }) => x.familyId === familyId;
+  return {
+    async getChild(id) {
+      return db.children.find((c) => c.id === id && inFamily(c)) ?? null;
+    },
+    async setChildMaxSum(id, maxSum) {
+      const child = db.children.find((c) => c.id === id && inFamily(c));
+      if (child) child.mathMaxSum = maxSum;
+    },
+    async addLedger(childId, delta, reason) {
+      db.ledger.push({
+        id: crypto.randomUUID(),
+        familyId,
+        childId,
+        delta,
+        reason,
+        createdAt: new Date().toISOString(),
+      });
+    },
+    async balance(childId) {
+      return db.ledger
+        .filter((e) => e.childId === childId && inFamily(e))
+        .reduce((s, e) => s + e.delta, 0);
+    },
+    async earnedToday(childId) {
+      return db.ledger
+        .filter((e) => e.childId === childId && inFamily(e) && e.delta > 0 && isToday(e.createdAt))
+        .reduce((s, e) => s + e.delta, 0);
+    },
+    async getSession(id) {
+      return db.sessions.find((s) => s.id === id && inFamily(s)) ?? null;
+    },
+    async addSession(session) {
+      db.sessions.push(session);
+    },
+    async markSessionFinished(id) {
+      const s = db.sessions.find((x) => x.id === id && inFamily(x));
+      if (s) s.finishedAt = new Date().toISOString();
+    },
+    async getPrize(id) {
+      return db.prizes.find((p) => p.id === id && inFamily(p)) ?? null;
+    },
+    async findPendingRedemption(childId, prizeId) {
+      return (
+        db.redemptions.find(
+          (r) =>
+            inFamily(r) &&
+            r.childId === childId &&
+            r.prizeId === prizeId &&
+            r.status === "pending",
+        ) ?? null
+      );
+    },
+    async getRedemption(id) {
+      return db.redemptions.find((r) => r.id === id && inFamily(r)) ?? null;
+    },
+    async addRedemption(redemption) {
+      db.redemptions.push(redemption);
+    },
+    async setRedemptionStatus(id, status: RedemptionStatus, decidedAt) {
+      const r = db.redemptions.find((x) => x.id === id && inFamily(x));
+      if (r) {
+        r.status = status;
+        r.decidedAt = decidedAt;
+      }
+    },
+    async upsertChild(child) {
+      const i = db.children.findIndex((c) => c.id === child.id && inFamily(c));
+      if (i === -1) db.children.push(child);
+      else db.children[i] = child;
+    },
+    async deleteChild(id) {
+      if (!db.children.some((c) => c.id === id && inFamily(c))) return;
+      db.children = db.children.filter((c) => c.id !== id);
+      db.ledger = db.ledger.filter((e) => e.childId !== id);
+      db.sessions = db.sessions.filter((s) => s.childId !== id);
+      db.redemptions = db.redemptions.filter((r) => r.childId !== id);
+    },
+    async upsertPrize(prize) {
+      const i = db.prizes.findIndex((p) => p.id === prize.id && inFamily(p));
+      if (i === -1) db.prizes.push(prize);
+      else db.prizes[i] = prize;
+    },
+    async deletePrize(id) {
+      if (!db.prizes.some((p) => p.id === id && inFamily(p))) return;
+      db.prizes = db.prizes.filter((p) => p.id !== id);
+      db.redemptions = db.redemptions.filter((r) => r.prizeId !== id);
+    },
+  };
+}
+
 export function createFileStore(): Store {
   return {
-    snapshot: read,
-    transaction<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {
-      return writeOp((db) => fn(makeTx(db)));
+    async snapshot(familyId) {
+      return scopedSnapshot(await read(), familyId);
     },
-    async listContent(status) {
+    transaction<T>(familyId: string, fn: (tx: Tx) => Promise<T>): Promise<T> {
+      return writeOp((db) => fn(makeTx(db, familyId)));
+    },
+    async listContent(familyId, status) {
       const db = await read();
-      return status ? db.contentItems.filter((c) => c.status === status) : db.contentItems;
+      return db.contentItems.filter(
+        (c) => c.familyId === familyId && (!status || c.status === status),
+      );
     },
-    addContentItems(items) {
+    addContentItems(_familyId, items) {
       return writeOp((db) => {
         db.contentItems.push(...items);
       });
     },
-    setContentStatus(id, status) {
+    setContentStatus(familyId, id, status) {
       return writeOp((db) => {
-        const c = db.contentItems.find((x) => x.id === id);
+        const c = db.contentItems.find((x) => x.id === id && x.familyId === familyId);
         if (c) c.status = status;
       });
     },
-    deleteContent(id) {
+    deleteContent(familyId, id) {
       return writeOp((db) => {
-        db.contentItems = db.contentItems.filter((c) => c.id !== id);
+        db.contentItems = db.contentItems.filter(
+          (c) => !(c.id === id && c.familyId === familyId),
+        );
+      });
+    },
+    async getFamily(id) {
+      const db = await read();
+      return db.families.find((f) => f.id === id) ?? null;
+    },
+    async getFamilyByOwner(ownerUserId) {
+      const db = await read();
+      return db.families.find((f) => f.ownerUserId === ownerUserId) ?? null;
+    },
+    createFamily(family) {
+      return writeOp((db) => {
+        db.families.push(family);
       });
     },
   };

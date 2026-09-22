@@ -3,6 +3,7 @@ import type {
   ContentItem,
   ContentStatus,
   DB,
+  Family,
   GameSession,
   Prize,
   Redemption,
@@ -58,16 +59,21 @@ export interface Tx {
 }
 
 export interface Store {
-  /** Read the whole (small) dataset for a page render. */
-  snapshot(): Promise<DB>;
-  /** Run a set of writes atomically. */
-  transaction<T>(fn: (tx: Tx) => Promise<T>): Promise<T>;
+  /** Read one family's dataset for a page render. */
+  snapshot(familyId: string): Promise<DB>;
+  /** Run a set of writes atomically, all scoped to one family. */
+  transaction<T>(familyId: string, fn: (tx: Tx) => Promise<T>): Promise<T>;
 
   // AI reading content (not part of the gameplay snapshot).
-  listContent(status?: ContentStatus): Promise<ContentItem[]>;
-  addContentItems(items: ContentItem[]): Promise<void>;
-  setContentStatus(id: string, status: ContentStatus): Promise<void>;
-  deleteContent(id: string): Promise<void>;
+  listContent(familyId: string, status?: ContentStatus): Promise<ContentItem[]>;
+  addContentItems(familyId: string, items: ContentItem[]): Promise<void>;
+  setContentStatus(familyId: string, id: string, status: ContentStatus): Promise<void>;
+  deleteContent(familyId: string, id: string): Promise<void>;
+
+  // Families
+  getFamily(id: string): Promise<Family | null>;
+  getFamilyByOwner(ownerUserId: string): Promise<Family | null>;
+  createFamily(family: Family): Promise<void>;
 }
 
 // --- Pure helpers over a snapshot (used by page components) ----------------

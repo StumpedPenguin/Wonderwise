@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { transaction } from "./db";
+import { currentFamilyId } from "./family";
 import { isParentAuthed } from "./auth";
 import type { Child, Prize } from "./types";
 
@@ -36,7 +37,8 @@ export async function saveChild(input: {
   const color = COLORS.includes(input.color) ? input.color : "sky";
   if (!name) return { ok: false, message: "Please enter a name." };
 
-  return transaction(async (tx) => {
+  const familyId = await currentFamilyId();
+  return transaction(familyId, async (tx) => {
     if (input.id) {
       const existing = await tx.getChild(input.id);
       if (!existing) return { ok: false, message: "That kid no longer exists." };
@@ -44,6 +46,7 @@ export async function saveChild(input: {
     } else {
       const child: Child = {
         id: `child-${crypto.randomUUID().slice(0, 8)}`,
+        familyId,
         name,
         avatar,
         color,
@@ -60,7 +63,8 @@ export async function saveChild(input: {
 
 export async function deleteChild(id: string): Promise<AdminResult> {
   if (!(await requireParent())) return DENIED;
-  return transaction(async (tx) => {
+  const familyId = await currentFamilyId();
+  return transaction(familyId, async (tx) => {
     await tx.deleteChild(id);
     revalidatePath("/");
     revalidatePath("/parent");
@@ -82,9 +86,11 @@ export async function savePrize(input: {
   const cost = Math.max(0, Math.round(Number(input.cost) || 0));
   if (!name) return { ok: false, message: "Please enter a prize name." };
 
-  return transaction(async (tx) => {
+  const familyId = await currentFamilyId();
+  return transaction(familyId, async (tx) => {
     const prize: Prize = {
       id: input.id ?? `prize-${crypto.randomUUID().slice(0, 8)}`,
+      familyId,
       name,
       emoji,
       cost,
@@ -98,7 +104,8 @@ export async function savePrize(input: {
 
 export async function deletePrize(id: string): Promise<AdminResult> {
   if (!(await requireParent())) return DENIED;
-  return transaction(async (tx) => {
+  const familyId = await currentFamilyId();
+  return transaction(familyId, async (tx) => {
     await tx.deletePrize(id);
     revalidatePath("/parent");
     return { ok: true, message: "Removed." };

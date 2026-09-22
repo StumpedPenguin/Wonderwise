@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { transaction } from "./db";
+import { currentFamilyId } from "./family";
 import { computeAward } from "./economy";
 import { getGame } from "./games";
 import { startSession } from "./session";
@@ -22,7 +23,8 @@ export async function startGame(
   gameId: string,
   difficulty: Difficulty,
 ): Promise<StartResult> {
-  const session = await startSession(childId, gameId, difficulty);
+  const familyId = await currentFamilyId();
+  const session = await startSession(familyId, childId, gameId, difficulty);
   if (!session) return { ok: false, sessionId: "", questions: [] };
   return { ok: true, sessionId: session.id, questions: session.questions };
 }
@@ -62,7 +64,8 @@ export async function finishSession(
   sessionId: string,
   responses: Record<string, string>,
 ): Promise<FinishResult> {
-  return transaction(async (tx) => {
+  const familyId = await currentFamilyId();
+  return transaction(familyId, async (tx) => {
     const session = await tx.getSession(sessionId);
     if (!session || session.finishedAt) return emptyFinish;
 
@@ -112,7 +115,8 @@ export async function requestRedemption(
   childId: string,
   prizeId: string,
 ): Promise<RedeemResult> {
-  return transaction(async (tx) => {
+  const familyId = await currentFamilyId();
+  return transaction(familyId, async (tx) => {
     const child = await tx.getChild(childId);
     const prize = await tx.getPrize(prizeId);
     if (!child || !prize) return { ok: false, message: "Hmm, that prize is gone." };
@@ -122,6 +126,7 @@ export async function requestRedemption(
 
     await tx.addRedemption({
       id: crypto.randomUUID(),
+      familyId,
       childId,
       prizeId,
       status: "pending",
@@ -138,7 +143,8 @@ export async function requestRedemption(
 export async function claimRedemption(
   redemptionId: string,
 ): Promise<{ ok: boolean }> {
-  return transaction(async (tx) => {
+  const familyId = await currentFamilyId();
+  return transaction(familyId, async (tx) => {
     const r = await tx.getRedemption(redemptionId);
     if (!r || r.status !== "approved") return { ok: false };
     await tx.setRedemptionStatus(r.id, "claimed", new Date().toISOString());
@@ -157,7 +163,8 @@ export async function decideRedemption(
   redemptionId: string,
   decision: "approved" | "denied",
 ): Promise<DecisionResult> {
-  return transaction(async (tx) => {
+  const familyId = await currentFamilyId();
+  return transaction(familyId, async (tx) => {
     const r = await tx.getRedemption(redemptionId);
     if (!r || r.status !== "pending") return { ok: false, message: "Already handled." };
 

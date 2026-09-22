@@ -2,27 +2,27 @@ import { transaction, listContent } from "./db";
 import { getGame } from "./games";
 import type { Difficulty, GameSession, Question } from "./types";
 
-// Starts a round for a child + game at a difficulty. Questions are generated
-// on the SERVER (each tagged with the difficulty) and stored, so grading and
-// the token reward are decided server-side.
+// Starts a round for a child + game at a difficulty, within one family.
 export async function startSession(
+  familyId: string,
   childId: string,
   gameId: string,
   difficulty: Difficulty,
 ): Promise<GameSession | null> {
   const questions =
     gameId === "read-answer"
-      ? await buildReadAnswer(difficulty)
+      ? await buildReadAnswer(familyId, difficulty)
       : (getGame(gameId)?.generate(difficulty) ?? null);
 
   if (!questions || questions.length === 0) return null;
 
-  return transaction(async (tx) => {
+  return transaction(familyId, async (tx) => {
     const child = await tx.getChild(childId);
     if (!child) return null;
 
     const session: GameSession = {
       id: crypto.randomUUID(),
+      familyId,
       childId,
       gameId,
       questions,
@@ -43,10 +43,11 @@ function shuffle<T>(arr: T[]): T[] {
   return a;
 }
 
-// Read & Answer: pick a random APPROVED passage and turn its comprehension
-// questions into reading questions. Returns null when nothing is approved yet.
-async function buildReadAnswer(difficulty: Difficulty): Promise<Question[] | null> {
-  const approved = await listContent("approved");
+async function buildReadAnswer(
+  familyId: string,
+  difficulty: Difficulty,
+): Promise<Question[] | null> {
+  const approved = await listContent(familyId, "approved");
   if (approved.length === 0) return null;
   const pick = approved[Math.floor(Math.random() * approved.length)];
   return pick.payload.questions.map((q) => ({
