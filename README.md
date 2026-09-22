@@ -27,9 +27,9 @@ All procedural (free, infinite, safe) and audio-first:
 | --- | --- | --- |
 | **Add & Subtract** | Numbers | Multiple-choice add/subtract within the child's level. |
 | **Count & Tap** | Numbers | Count the emojis, tap the number. |
-| **Letter Sounds** | Reading | Hear a letter's sound, tap the letter. |
-| **Build a Word** | Writing | Tap letters to spell a word from its picture. |
-| **Tracing** | Writing | Trace a letter or number on a canvas with your finger. |
+| **Read the Word** | Reading | Hear a word, read the options, tap the matching word. |
+| **Build a Word** | Writing | Tap letters to spell a 3- or 4-letter word from its picture. |
+| **Tracing** | Writing | Trace a letter or number on a canvas; graded for accuracy, not scribbles. |
 
 Games plug into one registry (`src/lib/games.ts`) — each defines how it
 generates a round, what its answers are worth, and how difficulty adapts.

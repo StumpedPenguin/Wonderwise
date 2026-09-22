@@ -38,17 +38,19 @@ function numberChoices(answer: number, maxSum: number): string[] {
 function generateMath(maxSum: number, count: number): Question[] {
   const out: Question[] = [];
   for (let i = 0; i < count; i++) {
-    const isAdd = Math.random() < 0.6;
+    const isAdd = Math.random() < 0.55;
     let a: number, b: number, answer: number, promptText: string, spoken: string;
     if (isAdd) {
-      a = randInt(0, maxSum);
-      b = randInt(0, maxSum - a);
+      // Both operands >= 1 and answer >= 2 (no +0 and no 0 answers).
+      a = randInt(1, Math.max(1, maxSum - 1));
+      b = randInt(1, Math.max(1, maxSum - a));
       answer = a + b;
       promptText = `${a} + ${b}`;
       spoken = `What is ${a} plus ${b}?`;
     } else {
-      a = randInt(1, maxSum);
-      b = randInt(0, a);
+      // a >= 2, 1 <= b <= a-1  → answer between 1 and a-1 (never 0, never −0).
+      a = randInt(2, Math.max(2, maxSum));
+      b = randInt(1, a - 1);
       answer = a - b;
       promptText = `${a} − ${b}`;
       spoken = `What is ${a} minus ${b}?`;
@@ -96,44 +98,43 @@ function generateCount(maxSum: number, count: number): Question[] {
   return out;
 }
 
-// --- Letter Sounds ----------------------------------------------------------
-
-const LETTER_SOUNDS: Record<string, string> = {
-  B: "buh", C: "kuh", D: "duh", F: "fff", G: "guh", H: "huh", J: "juh",
-  K: "kuh", L: "lll", M: "mmm", N: "nnn", P: "puh", R: "rrr", S: "sss",
-  T: "tuh", V: "vvv", Z: "zzz",
-};
-
-function generateLetters(count: number): Question[] {
-  const letters = Object.keys(LETTER_SOUNDS);
-  const out: Question[] = [];
-  for (let i = 0; i < count; i++) {
-    const target = letters[randInt(0, letters.length - 1)];
-    const choiceSet = new Set<string>([target]);
-    while (choiceSet.size < 4) {
-      choiceSet.add(letters[randInt(0, letters.length - 1)]);
-    }
-    out.push({
-      id: crypto.randomUUID(),
-      kind: "choice",
-      spoken: `Find the letter ${target}. ${target} says ${LETTER_SOUNDS[target]}.`,
-      promptText: "🔊",
-      answer: target,
-      choices: shuffle([...choiceSet]),
-    });
-  }
-  return out;
-}
-
-// --- Build-a-Word (CVC spelling) --------------------------------------------
+// --- Words (shared by Read the Word and Build a Word) ------------------------
 
 const WORDS = [
+  // 3-letter
   { w: "cat", e: "🐱" }, { w: "dog", e: "🐶" }, { w: "sun", e: "☀️" },
   { w: "hat", e: "🎩" }, { w: "bed", e: "🛏️" }, { w: "pig", e: "🐷" },
   { w: "cup", e: "🥤" }, { w: "bus", e: "🚌" }, { w: "box", e: "📦" },
   { w: "fox", e: "🦊" }, { w: "pen", e: "🖊️" }, { w: "bag", e: "🎒" },
-  { w: "hen", e: "🐔" }, { w: "web", e: "🕸️" }, { w: "log", e: "🪵" },
+  { w: "hen", e: "🐔" }, { w: "bee", e: "🐝" }, { w: "owl", e: "🦉" },
+  // 4-letter
+  { w: "fish", e: "🐟" }, { w: "frog", e: "🐸" }, { w: "star", e: "⭐" },
+  { w: "moon", e: "🌙" }, { w: "cake", e: "🍰" }, { w: "ball", e: "⚽" },
+  { w: "bird", e: "🐦" }, { w: "tree", e: "🌳" }, { w: "boat", e: "⛵" },
+  { w: "milk", e: "🥛" }, { w: "duck", e: "🦆" }, { w: "lion", e: "🦁" },
+  { w: "bear", e: "🐻" }, { w: "corn", e: "🌽" }, { w: "leaf", e: "🍃" },
 ];
+
+// --- Read the Word (reading) -----------------------------------------------
+
+function generateReadWord(count: number): Question[] {
+  return shuffle(WORDS)
+    .slice(0, count)
+    .map(({ w, e }) => {
+      const distractors = shuffle(WORDS.filter((x) => x.w !== w))
+        .slice(0, 3)
+        .map((x) => x.w);
+      return {
+        id: crypto.randomUUID(),
+        kind: "choice" as const,
+        // Say the word aloud; the child reads the options to find the match.
+        spoken: `Find the word ${w}.`,
+        promptText: e,
+        answer: w,
+        choices: shuffle([w, ...distractors]),
+      };
+    });
+}
 
 const ALPHABET = "abcdefghijklmnopqrstuvwxyz".split("");
 
@@ -215,13 +216,13 @@ export const GAMES: GameDef[] = [
     adapt: (c, acc) => ({ mathMaxSum: nextMaxSum(c.mathMaxSum, acc) }),
   },
   {
-    id: "letter-sounds",
+    id: "read-the-word",
     subject: "reading",
-    title: "Letter Sounds",
-    emoji: "🔤",
+    title: "Read the Word",
+    emoji: "📖",
     color: "indigo",
-    generate: () => generateLetters(QUESTIONS_PER_SESSION),
-    weight: () => 1.1,
+    generate: () => generateReadWord(QUESTIONS_PER_SESSION),
+    weight: () => 1.3,
     adapt: () => ({}),
   },
   {

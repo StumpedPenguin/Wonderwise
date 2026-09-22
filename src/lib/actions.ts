@@ -4,6 +4,27 @@ import { revalidatePath } from "next/cache";
 import { transaction } from "./db";
 import { computeAward } from "./economy";
 import { getGame } from "./games";
+import { startSession } from "./session";
+import type { Question } from "./types";
+
+export interface StartResult {
+  ok: boolean;
+  sessionId: string;
+  questions: Question[];
+}
+
+/**
+ * Start a round from the client, so the game page stays a pure render and the
+ * reward screen isn't remounted (and cleared) when a later action revalidates.
+ */
+export async function startGame(
+  childId: string,
+  gameId: string,
+): Promise<StartResult> {
+  const session = await startSession(childId, gameId);
+  if (!session) return { ok: false, sessionId: "", questions: [] };
+  return { ok: true, sessionId: session.id, questions: session.questions };
+}
 
 // ---------------------------------------------------------------------------
 // Server actions — every state change the client can trigger goes through
@@ -125,6 +146,19 @@ export async function requestRedemption(
     revalidatePath(`/play/${childId}/prizes`);
     revalidatePath("/parent");
     return { ok: true, message: "Sent! Ask a grown-up to say yes. 🎉" };
+  });
+}
+
+/** A child marks an approved prize as used in real life. */
+export async function claimRedemption(
+  redemptionId: string,
+): Promise<{ ok: boolean }> {
+  return transaction(async (tx) => {
+    const r = await tx.getRedemption(redemptionId);
+    if (!r || r.status !== "approved") return { ok: false };
+    await tx.setRedemptionStatus(r.id, "claimed", new Date().toISOString());
+    revalidatePath(`/play/${r.childId}/prizes`);
+    return { ok: true };
   });
 }
 

@@ -33,7 +33,7 @@ export interface Prize {
   active: boolean;
 }
 
-export type RedemptionStatus = "pending" | "approved" | "denied";
+export type RedemptionStatus = "pending" | "approved" | "denied" | "claimed";
 
 export interface Redemption {
   id: string;

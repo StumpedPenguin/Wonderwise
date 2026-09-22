@@ -2,34 +2,54 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { finishSession, type FinishResult } from "@/lib/actions";
+import { finishSession, startGame, type FinishResult } from "@/lib/actions";
 import type { Question } from "@/lib/types";
 import { accentFor } from "@/lib/theme";
 import { speak } from "@/lib/speak";
 import { TokenBadge } from "./TokenBadge";
 
-type Phase = "playing" | "finishing" | "done";
+type Phase = "loading" | "playing" | "finishing" | "done" | "error";
 
 export function PlayGame({
   childId,
   childName,
   color,
-  sessionId,
-  questions,
+  gameId,
 }: {
   childId: string;
   childName: string;
   color: string;
-  sessionId: string;
-  questions: Question[];
+  gameId: string;
 }) {
   const accent = accentFor(color);
-  const [phase, setPhase] = useState<Phase>("playing");
+  const [phase, setPhase] = useState<Phase>("loading");
   const [index, setIndex] = useState(0);
+  const [sessionId, setSessionId] = useState("");
+  const [questions, setQuestions] = useState<Question[]>([]);
   const [result, setResult] = useState<FinishResult | null>(null);
   const responses = useRef<Record<string, string>>({});
 
   const current = questions[index];
+
+  // Fetch the round once, on mount — not in the server render, so a later
+  // revalidation never regenerates it or clears the reward screen.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const res = await startGame(childId, gameId);
+      if (cancelled) return;
+      if (!res.ok) {
+        setPhase("error");
+        return;
+      }
+      setSessionId(res.sessionId);
+      setQuestions(res.questions);
+      setPhase("playing");
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [childId, gameId]);
 
   useEffect(() => {
     if (phase === "done" && result) {
@@ -49,6 +69,7 @@ export function PlayGame({
 
   const onComplete = useCallback(
     (value: string) => {
+      if (!current) return;
       responses.current[current.id] = value;
       if (index + 1 >= questions.length) {
         void finish();
@@ -60,12 +81,39 @@ export function PlayGame({
   );
 
   if (phase === "done" && result) {
-    return <RewardScreen childId={childId} color={color} result={result} />;
+    return (
+      <RewardScreen childId={childId} gameId={gameId} color={color} result={result} />
+    );
   }
   if (phase === "finishing") {
     return (
       <div className="grid flex-1 place-items-center text-center">
         <div className="animate-pop text-6xl">✨</div>
+      </div>
+    );
+  }
+  if (phase === "loading" || !current) {
+    return (
+      <div className="grid flex-1 place-items-center text-center">
+        <div className="animate-wiggle text-6xl">🎲</div>
+      </div>
+    );
+  }
+  if (phase === "error") {
+    return (
+      <div className="grid flex-1 place-items-center px-6 text-center">
+        <div className="rounded-4xl bg-white px-8 py-10 shadow-lg">
+          <div className="text-5xl">😕</div>
+          <p className="mt-3 font-display text-xl text-slate-600">
+            Couldn't start the game.
+          </p>
+          <Link
+            href={`/play/${childId}`}
+            className={`btn-bounce mt-5 inline-block rounded-full ${accent.solid} px-6 py-3 font-display font-bold text-white shadow-md`}
+          >
+            Back to games
+          </Link>
+        </div>
       </div>
     );
   }
@@ -167,13 +215,14 @@ function ChoiceQuestion({
             else if (isChosen) tone = "bg-rose-300 text-white ring-2 ring-rose-300";
             else tone = "bg-white text-slate-300 ring-2 ring-slate-100";
           }
+          const size = choice.length <= 2 ? "text-5xl" : "text-3xl";
           return (
             <button
               key={choice}
               type="button"
               disabled={chosen !== null}
               onClick={() => choose(choice)}
-              className={`btn-bounce rounded-4xl py-8 font-display text-5xl font-bold shadow-md ${tone}`}
+              className={`btn-bounce break-words rounded-4xl px-2 py-8 font-display font-bold shadow-md ${size} ${tone}`}
             >
               {choice}
             </button>
@@ -317,6 +366,7 @@ function TraceQuestion({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const drawn = useRef<{ x: number; y: number }[]>([]);
   const samples = useRef<{ x: number; y: number }[]>([]);
+  const onCells = useRef<Set<string>>(new Set());
   const drawing = useRef(false);
   const locked = useRef(false);
   const [checked, setChecked] = useState<boolean | null>(null);
@@ -359,6 +409,11 @@ function TraceQuestion({
           if (data[(y * TRACE_SIZE + x) * 4 + 3] > 128) filled.push({ x, y });
         }
       }
+      // Grid of cells the glyph fills — used to reject drawing off the shape.
+      const cells = new Set<string>();
+      for (const p of filled) cells.add(`${p.x / 6}|${p.y / 6}`);
+      onCells.current = cells;
+
       for (let i = filled.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
         [filled[i], filled[j]] = [filled[j], filled[i]];
@@ -418,13 +473,30 @@ function TraceQuestion({
   function done() {
     if (locked.current) return;
     locked.current = true;
-    const R2 = 26 * 26;
+    // Recall: how much of the glyph the child covered.
+    const R2 = 24 * 24;
     let hits = 0;
     for (const s of samples.current) {
       if (drawn.current.some((d) => (d.x - s.x) ** 2 + (d.y - s.y) ** 2 <= R2)) hits++;
     }
-    const coverage = samples.current.length ? hits / samples.current.length : 0;
-    const ok = coverage >= 0.35 && drawn.current.length > 5;
+    const recall = samples.current.length ? hits / samples.current.length : 0;
+
+    // Precision: how much of their drawing stayed on the glyph (rejects scribbles).
+    let onGlyph = 0;
+    for (const d of drawn.current) {
+      const cx = Math.floor(d.x / 6);
+      const cy = Math.floor(d.y / 6);
+      let near = false;
+      for (let dx = -1; dx <= 1 && !near; dx++) {
+        for (let dy = -1; dy <= 1 && !near; dy++) {
+          if (onCells.current.has(`${cx + dx}|${cy + dy}`)) near = true;
+        }
+      }
+      if (near) onGlyph++;
+    }
+    const precision = drawn.current.length ? onGlyph / drawn.current.length : 0;
+
+    const ok = recall >= 0.45 && precision >= 0.6 && drawn.current.length > 10;
     setChecked(ok);
     window.setTimeout(() => onComplete(ok ? "traced" : "miss"), 1200);
   }
@@ -495,10 +567,12 @@ function TraceQuestion({
 
 function RewardScreen({
   childId,
+  gameId,
   color,
   result,
 }: {
   childId: string;
+  gameId: string;
   color: string;
   result: FinishResult;
 }) {
@@ -556,17 +630,24 @@ function RewardScreen({
         )}
 
         <div className="mt-7 flex flex-col gap-3 sm:flex-row">
-          <Link
-            href={`/play/${childId}`}
+          {/* Full navigation → a fresh round mounts cleanly. */}
+          <a
+            href={`/play/${childId}/game/${gameId}`}
             className={`btn-bounce rounded-full ${accent.solid} px-6 py-3 font-display text-lg font-bold text-white shadow-md`}
           >
-            🎮 More games
+            🔁 Play again
+          </a>
+          <Link
+            href={`/play/${childId}`}
+            className="btn-bounce rounded-full bg-white px-6 py-3 font-display text-lg font-bold text-slate-600 shadow-md ring-2 ring-slate-100"
+          >
+            🎮 Games
           </Link>
           <Link
             href={`/play/${childId}/prizes`}
             className="btn-bounce rounded-full bg-white px-6 py-3 font-display text-lg font-bold text-slate-600 shadow-md ring-2 ring-slate-100"
           >
-            🎁 Prize shop
+            🎁 Prizes
           </Link>
         </div>
       </div>
