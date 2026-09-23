@@ -93,9 +93,14 @@ const COUNT_CAP: Record<Difficulty, number> = { easy: 5, medium: 8, hard: 12 };
 function generateCount(difficulty: Difficulty): Question[] {
   const cap = COUNT_CAP[difficulty];
   const out: Question[] = [];
+  let prev = -1;
   for (let i = 0; i < DEFAULT_QUESTIONS; i++) {
     const item = COUNTABLES[randInt(0, COUNTABLES.length - 1)];
-    const n = randInt(1, cap);
+    // Never ask the same count twice in a row (cap >= 5, so a different value
+    // always exists).
+    let n = randInt(1, cap);
+    while (n === prev) n = randInt(1, cap);
+    prev = n;
     out.push({
       id: crypto.randomUUID(),
       kind: "choice",
