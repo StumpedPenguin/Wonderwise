@@ -114,6 +114,65 @@ function generateCount(difficulty: Difficulty): Question[] {
   return out;
 }
 
+// --- Find the Letter/Number (listen & choose) -------------------------------
+
+const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
+
+// Easy: numbers 1-10 + all letters. Medium: 1-20 + all letters. Hard: numbers
+// up to 200 (no letters — the challenge is bigger numbers).
+const FIND_MAX: Record<Difficulty, number> = { easy: 10, medium: 20, hard: 200 };
+const FIND_LETTERS: Record<Difficulty, boolean> = { easy: true, medium: true, hard: false };
+
+function generateFind(difficulty: Difficulty): Question[] {
+  const maxNum = FIND_MAX[difficulty];
+  const useLetters = FIND_LETTERS[difficulty];
+  const out: Question[] = [];
+  let prev = "";
+  for (let i = 0; i < DEFAULT_QUESTIONS; i++) {
+    const isLetter = useLetters && Math.random() < 0.5;
+    let answer: string;
+    let spoken: string;
+    const set = new Set<string>();
+
+    if (isLetter) {
+      do {
+        answer = LETTERS[randInt(0, 25)];
+      } while (answer === prev);
+      spoken = `Find the letter ${answer}.`;
+      set.add(answer);
+      while (set.size < 4) set.add(LETTERS[randInt(0, 25)]);
+    } else {
+      let n: number;
+      do {
+        n = randInt(1, maxNum);
+      } while (String(n) === prev);
+      answer = String(n);
+      spoken = `Find the number ${n}.`;
+      set.add(answer);
+      // Distractors: close by, so it's a real "recognize this number" test.
+      let guard = 0;
+      while (set.size < 4 && guard++ < 60) {
+        const spread = maxNum <= 20 ? maxNum : 20;
+        const c = n + randInt(-spread, spread);
+        if (c >= 1 && c <= maxNum) set.add(String(c));
+      }
+      for (let f = 1; set.size < 4; f++) if (f !== n) set.add(String(f));
+    }
+
+    prev = answer;
+    out.push({
+      id: crypto.randomUUID(),
+      kind: "choice",
+      difficulty,
+      spoken,
+      promptText: "👂",
+      answer,
+      choices: shuffle([...set]),
+    });
+  }
+  return out;
+}
+
 // --- Words (shared by Read the Word and Build a Word) ------------------------
 
 const WORDS = [
@@ -260,6 +319,7 @@ export interface GameDef {
 export const GAMES: GameDef[] = [
   { id: "math-add-sub", subject: "math", title: "Add & Subtract", emoji: "➕", color: "sky", generate: generateMath },
   { id: "count-tap", subject: "math", title: "Count & Tap", emoji: "🔢", color: "teal", generate: generateCount },
+  { id: "find-it", subject: "math", title: "Listen & Find", emoji: "👂", color: "cyan", generate: generateFind },
   { id: "story-problems", subject: "math", title: "Story Problems", emoji: "🧮", color: "amber", generate: generateStoryProblems },
   { id: "read-the-word", subject: "reading", title: "Read the Word", emoji: "📖", color: "indigo", generate: generateReadWord },
   { id: "story-time", subject: "reading", title: "Story Time", emoji: "📚", color: "rose", generate: generateStoryTime },
