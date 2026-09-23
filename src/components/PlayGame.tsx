@@ -16,6 +16,9 @@ const LEVELS: { id: Difficulty; label: string; per: number; tone: string }[] = [
   { id: "hard", label: "Hard", per: 5, tone: "from-rose-400 to-pink-500" },
 ];
 
+// Tokens are awarded per LESSON (not per question), so "Hard = 5" means the
+// child earns 5 tokens for finishing a hard lesson with 80%+ correct.
+
 export function PlayGame({
   childId,
   childName,
@@ -59,15 +62,17 @@ export function PlayGame({
     [childId, gameId],
   );
 
+  const silent = questions[0]?.silent ?? false;
+
   useEffect(() => {
-    if (phase === "done" && result) {
+    if (phase === "done" && result && !silent) {
       speak(
         result.tokens > 0
           ? `Awesome ${childName}! You earned ${result.tokens} tokens!`
           : `Great effort, ${childName}!`,
       );
     }
-  }, [phase, result, childName]);
+  }, [phase, result, childName, silent]);
 
   const finish = useCallback(async () => {
     setPhase("finishing");
@@ -114,7 +119,7 @@ export function PlayGame({
             >
               <span className="font-display text-2xl font-bold">{lvl.label}</span>
               <span className="inline-flex items-center gap-1 rounded-full bg-white/25 px-3 py-1 font-display font-bold">
-                {lvl.per} 🪙 each
+                {lvl.per} 🪙
               </span>
             </button>
           ))}
@@ -196,8 +201,8 @@ function ChoiceQuestion({
   const locked = useRef(false);
 
   useEffect(() => {
-    speak(question.spoken);
-  }, [question.spoken]);
+    if (!question.silent) speak(question.spoken);
+  }, [question.spoken, question.silent]);
 
   const answeredWrong = chosen !== null && chosen !== question.answer;
   const answeredRight = chosen !== null && chosen === question.answer;
@@ -213,14 +218,20 @@ function ChoiceQuestion({
   return (
     <>
       <section className="mt-6 flex flex-col items-center rounded-4xl bg-white px-6 py-10 shadow-lg">
-        <button
-          type="button"
-          onClick={() => speak(question.spoken)}
-          className={`btn-bounce mb-4 inline-flex items-center gap-2 rounded-full ${accent.soft} px-4 py-2 font-display ${accent.text}`}
-          aria-label="Hear it again"
-        >
-          🔊 Say it again
-        </button>
+        {question.silent ? (
+          <p className={`mb-4 rounded-full ${accent.soft} px-4 py-2 font-display text-sm ${accent.text}`}>
+            📖 Read it yourself
+          </p>
+        ) : (
+          <button
+            type="button"
+            onClick={() => speak(question.spoken)}
+            className={`btn-bounce mb-4 inline-flex items-center gap-2 rounded-full ${accent.soft} px-4 py-2 font-display ${accent.text}`}
+            aria-label="Hear it again"
+          >
+            🔊 Say it again
+          </button>
+        )}
         <div
           className={`text-center font-display font-bold tabular-nums ${
             longPrompt ? "text-4xl leading-snug" : "text-7xl sm:text-8xl"
@@ -397,8 +408,8 @@ function ReadingQuestion({
   const locked = useRef(false);
 
   useEffect(() => {
-    speak(`${question.passage ?? ""}. ${question.spoken}`);
-  }, [question.id, question.passage, question.spoken]);
+    if (!question.silent) speak(`${question.passage ?? ""}. ${question.spoken}`);
+  }, [question.id, question.passage, question.spoken, question.silent]);
 
   const answeredWrong = chosen !== null && chosen !== question.answer;
   const answeredRight = chosen !== null && chosen === question.answer;
@@ -413,26 +424,34 @@ function ReadingQuestion({
   return (
     <>
       <section className="mt-6 rounded-4xl bg-white px-6 py-5 shadow-lg">
-        <button
-          type="button"
-          onClick={() => speak(question.passage ?? "")}
-          className={`btn-bounce mb-3 inline-flex items-center gap-2 rounded-full ${accent.soft} px-4 py-2 font-display ${accent.text}`}
-        >
-          🔊 Read the story
-        </button>
+        {question.silent ? (
+          <p className={`mb-3 inline-flex items-center gap-2 rounded-full ${accent.soft} px-4 py-2 font-display text-sm ${accent.text}`}>
+            📖 Read the story
+          </p>
+        ) : (
+          <button
+            type="button"
+            onClick={() => speak(question.passage ?? "")}
+            className={`btn-bounce mb-3 inline-flex items-center gap-2 rounded-full ${accent.soft} px-4 py-2 font-display ${accent.text}`}
+          >
+            🔊 Read the story
+          </button>
+        )}
         <p className="font-display text-xl leading-relaxed text-slate-700">
           {question.passage}
         </p>
       </section>
 
       <section className="mt-4 flex flex-col items-center rounded-4xl bg-white px-6 py-5 shadow-md">
-        <button
-          type="button"
-          onClick={() => speak(question.spoken)}
-          className="btn-bounce mb-2 inline-flex items-center gap-2 rounded-full bg-slate-100 px-4 py-1.5 font-display text-sm text-slate-500"
-        >
-          🔊 Question
-        </button>
+        {!question.silent && (
+          <button
+            type="button"
+            onClick={() => speak(question.spoken)}
+            className="btn-bounce mb-2 inline-flex items-center gap-2 rounded-full bg-slate-100 px-4 py-1.5 font-display text-sm text-slate-500"
+          >
+            🔊 Question
+          </button>
+        )}
         <p className="text-center font-display text-2xl font-bold text-slate-800">
           {question.promptText}
         </p>

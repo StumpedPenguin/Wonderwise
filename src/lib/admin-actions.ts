@@ -111,3 +111,15 @@ export async function deletePrize(id: string): Promise<AdminResult> {
     return { ok: true, message: "Removed." };
   });
 }
+
+/** Reset every kid's token balance in this family back to 0. */
+export async function resetTokens(): Promise<AdminResult> {
+  if (!(await requireParent())) return DENIED;
+  const familyId = await currentFamilyId();
+  return transaction(familyId, async (tx) => {
+    await tx.resetTokens();
+    revalidatePath("/parent");
+    revalidatePath("/");
+    return { ok: true, message: "All token counts reset to 0." };
+  });
+}

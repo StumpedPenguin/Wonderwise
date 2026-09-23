@@ -6,6 +6,7 @@ import { DecisionButtons } from "@/components/DecisionButtons";
 import { SignOutButton } from "@/components/SignOutButton";
 import { KidEditor } from "@/components/KidEditor";
 import { PrizeEditor } from "@/components/PrizeEditor";
+import { ResetTokensButton } from "@/components/ResetTokensButton";
 
 export const dynamic = "force-dynamic";
 
@@ -98,7 +99,10 @@ export default async function ParentPage() {
 
       {/* Wallets */}
       <section className="mt-8">
-        <h2 className="font-display text-2xl font-bold text-slate-600">Wallets</h2>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="font-display text-2xl font-bold text-slate-600">Wallets</h2>
+          <ResetTokensButton />
+        </div>
         <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
           {db.children.map((c) => (
             <div

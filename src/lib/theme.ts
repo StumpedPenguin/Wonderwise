@@ -56,6 +56,20 @@ export const gameAccent: Record<string, Accent> = {
     solid: "bg-emerald-500",
     grad: "from-emerald-400 to-teal-500",
   },
+  amber: {
+    text: "text-amber-600",
+    ring: "ring-amber-200",
+    soft: "bg-amber-100",
+    solid: "bg-amber-500",
+    grad: "from-amber-400 to-orange-500",
+  },
+  rose: {
+    text: "text-rose-600",
+    ring: "ring-rose-200",
+    soft: "bg-rose-100",
+    solid: "bg-rose-500",
+    grad: "from-rose-400 to-pink-500",
+  },
 };
 
 export function accentFor(color: string): Accent {

@@ -33,6 +33,8 @@ export interface Tx {
   addLedger(childId: string, delta: number, reason: string): Promise<void>;
   balance(childId: string): Promise<number>;
   earnedToday(childId: string): Promise<number>;
+  /** Wipe every token entry for this family — resets all balances to 0. */
+  resetTokens(): Promise<void>;
 
   getSession(id: string): Promise<GameSession | null>;
   addSession(session: GameSession): Promise<void>;

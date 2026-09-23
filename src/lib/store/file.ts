@@ -101,6 +101,9 @@ function makeTx(db: FileDB, familyId: string): Tx {
         .filter((e) => e.childId === childId && inFamily(e) && e.delta > 0 && isToday(e.createdAt))
         .reduce((s, e) => s + e.delta, 0);
     },
+    async resetTokens() {
+      db.ledger = db.ledger.filter((e) => !inFamily(e));
+    },
     async getSession(id) {
       return db.sessions.find((s) => s.id === id && inFamily(s)) ?? null;
     },

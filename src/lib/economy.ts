@@ -2,20 +2,20 @@ import type { Difficulty } from "./types";
 
 // The token economy.
 //
-// The child picks a difficulty before each game. Tokens are earned per correct
-// answer at a rate set by that difficulty — but ONLY if they get at least 80%
-// of the round correct. Below the bar, the round earns nothing.
+// The child picks a difficulty before each game and plays one lesson. If they
+// get at least 80% of the lesson correct, they earn a FLAT number of tokens set
+// by that difficulty — the same number shown on the level button. Below the
+// bar, the lesson earns nothing. (Tokens are per-lesson, NOT per question, so
+// "Hard = 5" always means 5 tokens for the lesson.)
 
-export const QUESTIONS_PER_SESSION = 5;
-
-/** Tokens earned per correct answer, by difficulty. */
-export const PER_CORRECT: Record<Difficulty, number> = {
+/** Tokens earned for passing a lesson, by difficulty. */
+export const PER_LESSON: Record<Difficulty, number> = {
   easy: 1,
   medium: 3,
   hard: 5,
 };
 
-/** Fraction of the round that must be correct to earn any tokens. */
+/** Fraction of the lesson that must be correct to earn any tokens. */
 export const ACCURACY_GATE = 0.8;
 
 export interface AwardInput {
@@ -33,6 +33,6 @@ export interface AwardResult {
 export function computeAward({ correct, total, difficulty }: AwardInput): AwardResult {
   const accuracy = total > 0 ? correct / total : 0;
   const passed = accuracy >= ACCURACY_GATE;
-  const tokens = passed ? correct * PER_CORRECT[difficulty] : 0;
+  const tokens = passed ? PER_LESSON[difficulty] : 0;
   return { tokens, accuracy, passed };
 }

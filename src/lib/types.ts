@@ -73,6 +73,8 @@ export interface Question {
   choices: string[];
   /** For "reading": the passage to show and read aloud. */
   passage?: string;
+  /** When true, the child must READ (no text-to-speech, no 🔊 buttons). */
+  silent?: boolean;
 }
 
 // --- AI reading content -----------------------------------------------------

@@ -1,5 +1,10 @@
 import type { Difficulty, Question, Subject } from "./types";
-import { QUESTIONS_PER_SESSION } from "./economy";
+import { WORD_PROBLEMS } from "./wordProblems";
+import { READING_PROMPTS } from "./readingPrompts";
+
+// Standard lessons are 10 questions. Some games override this (story problems
+// are 5; reading is one story per lesson).
+const DEFAULT_QUESTIONS = 10;
 
 // ---------------------------------------------------------------------------
 // Procedural games — free, infinite, instant, safe. Each game generates a
@@ -41,7 +46,7 @@ const MATH_MAX: Record<Difficulty, number> = { easy: 5, medium: 10, hard: 20 };
 function generateMath(difficulty: Difficulty): Question[] {
   const maxSum = MATH_MAX[difficulty];
   const out: Question[] = [];
-  for (let i = 0; i < QUESTIONS_PER_SESSION; i++) {
+  for (let i = 0; i < DEFAULT_QUESTIONS; i++) {
     const isAdd = Math.random() < 0.55;
     let a: number, b: number, answer: number, promptText: string, spoken: string;
     if (isAdd) {
@@ -88,7 +93,7 @@ const COUNT_CAP: Record<Difficulty, number> = { easy: 5, medium: 8, hard: 12 };
 function generateCount(difficulty: Difficulty): Question[] {
   const cap = COUNT_CAP[difficulty];
   const out: Question[] = [];
-  for (let i = 0; i < QUESTIONS_PER_SESSION; i++) {
+  for (let i = 0; i < DEFAULT_QUESTIONS; i++) {
     const item = COUNTABLES[randInt(0, COUNTABLES.length - 1)];
     const n = randInt(1, cap);
     out.push({
@@ -130,7 +135,7 @@ function generateReadWord(difficulty: Difficulty): Question[] {
   const nChoices = difficulty === "hard" ? 6 : 4;
   const pool = WORDS.filter((x) => x.w.length === len);
   return shuffle(pool)
-    .slice(0, QUESTIONS_PER_SESSION)
+    .slice(0, DEFAULT_QUESTIONS)
     .map(({ w, e }) => {
       const distractors = shuffle(pool.filter((x) => x.w !== w))
         .slice(0, nChoices - 1)
@@ -154,7 +159,7 @@ function generateSpell(difficulty: Difficulty): Question[] {
   const extra = difficulty === "hard" ? 2 : 1;
   const pool = WORDS.filter((x) => x.w.length === len);
   return shuffle(pool)
-    .slice(0, QUESTIONS_PER_SESSION)
+    .slice(0, DEFAULT_QUESTIONS)
     .map(({ w, e }) => {
       const bank = w.split("");
       for (let k = 0; k < extra; k++) {
@@ -177,7 +182,7 @@ function generateSpell(difficulty: Difficulty): Question[] {
 
 // --- Tracing (handwriting) --------------------------------------------------
 
-const TRACE_EASY = "017CLOITU".split("");
+const TRACE_EASY = "017CLOITUVXYHEF".split("");
 const TRACE_MED = "ABDEFGHJKMNPRS234568".split("");
 const TRACE_HARD = "ABCDEFGHJKLMNOPRSTUW0123456789".split("");
 
@@ -185,7 +190,7 @@ function generateTrace(difficulty: Difficulty): Question[] {
   const pool =
     difficulty === "easy" ? TRACE_EASY : difficulty === "medium" ? TRACE_MED : TRACE_HARD;
   return shuffle(pool)
-    .slice(0, QUESTIONS_PER_SESSION)
+    .slice(0, DEFAULT_QUESTIONS)
     .map((glyph) => {
       const isLetter = /[A-Z]/.test(glyph);
       return {
@@ -198,6 +203,42 @@ function generateTrace(difficulty: Difficulty): Question[] {
         choices: [],
       };
     });
+}
+
+// --- Story Problems (read-only math word problems) --------------------------
+
+const STORY_PROBLEMS_PER_LESSON = 5;
+
+function generateStoryProblems(difficulty: Difficulty): Question[] {
+  return shuffle(WORD_PROBLEMS)
+    .slice(0, STORY_PROBLEMS_PER_LESSON)
+    .map(({ text, answer }) => ({
+      id: crypto.randomUUID(),
+      kind: "choice" as const,
+      difficulty,
+      spoken: text,
+      promptText: text,
+      answer: String(answer),
+      choices: numberChoices(answer, answer + 3),
+      silent: true, // the child reads the problem — no audio
+    }));
+}
+
+// --- Story Time (read-only reading comprehension) ---------------------------
+
+function generateStoryTime(difficulty: Difficulty): Question[] {
+  const story = READING_PROMPTS[randInt(0, READING_PROMPTS.length - 1)];
+  return story.questions.map((q) => ({
+    id: crypto.randomUUID(),
+    kind: "reading" as const,
+    difficulty,
+    spoken: q.q,
+    promptText: q.q,
+    answer: q.answer,
+    choices: shuffle(q.choices),
+    passage: story.passage,
+    silent: true, // the child reads the story — no audio
+  }));
 }
 
 // --- Registry ---------------------------------------------------------------
@@ -214,12 +255,14 @@ export interface GameDef {
 export const GAMES: GameDef[] = [
   { id: "math-add-sub", subject: "math", title: "Add & Subtract", emoji: "➕", color: "sky", generate: generateMath },
   { id: "count-tap", subject: "math", title: "Count & Tap", emoji: "🔢", color: "teal", generate: generateCount },
+  { id: "story-problems", subject: "math", title: "Story Problems", emoji: "🧮", color: "amber", generate: generateStoryProblems },
   { id: "read-the-word", subject: "reading", title: "Read the Word", emoji: "📖", color: "indigo", generate: generateReadWord },
+  { id: "story-time", subject: "reading", title: "Story Time", emoji: "📚", color: "rose", generate: generateStoryTime },
   { id: "build-a-word", subject: "writing", title: "Build a Word", emoji: "✏️", color: "violet", generate: generateSpell },
   { id: "tracing", subject: "writing", title: "Tracing", emoji: "✍️", color: "emerald", generate: generateTrace },
   // Read & Answer is built from approved AI content in startSession, so its
   // generate() is never called — it's here for the picker, title, and colors.
-  { id: "read-answer", subject: "reading", title: "Read & Answer", emoji: "📚", color: "sky", generate: () => [] },
+  { id: "read-answer", subject: "reading", title: "Read & Answer", emoji: "🤖", color: "sky", generate: () => [] },
 ];
 
 export function getGame(id: string): GameDef | undefined {

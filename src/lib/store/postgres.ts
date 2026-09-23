@@ -181,6 +181,9 @@ function makeTx(tx: Transaction, familyId: string): Tx {
         );
       return Number(row?.total ?? 0);
     },
+    async resetTokens() {
+      await tx.delete(L).where(eq(L.familyId, familyId));
+    },
     async getSession(id) {
       const [r] = await tx.select().from(S).where(and(eq(S.id, id), eq(S.familyId, familyId)));
       return r ? toSession(r) : null;
