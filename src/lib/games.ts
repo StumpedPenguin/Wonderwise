@@ -291,7 +291,8 @@ function generateStoryProblems(difficulty: Difficulty): Question[] {
 // --- Story Time (read-only reading comprehension) ---------------------------
 
 function generateStoryTime(difficulty: Difficulty): Question[] {
-  const story = READING_PROMPTS[randInt(0, READING_PROMPTS.length - 1)];
+  const pool = READING_PROMPTS[difficulty];
+  const story = pool[randInt(0, pool.length - 1)];
   return story.questions.map((q) => ({
     id: crypto.randomUUID(),
     kind: "reading" as const,
