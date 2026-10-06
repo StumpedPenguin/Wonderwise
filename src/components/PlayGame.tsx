@@ -173,6 +173,8 @@ export function PlayGame({
         <TraceQuestion key={current.id} question={current} accent={accent} onComplete={onComplete} />
       ) : current.kind === "reading" ? (
         <ReadingQuestion key={current.id} question={current} accent={accent} onComplete={onComplete} />
+      ) : current.kind === "domino" ? (
+        <DominoQuestion key={current.id} question={current} accent={accent} onComplete={onComplete} />
       ) : (
         <ChoiceQuestion key={current.id} question={current} accent={accent} onComplete={onComplete} />
       )}
@@ -482,6 +484,130 @@ function ReadingQuestion({
               disabled={chosen !== null}
               onClick={() => choose(choice)}
               className={`btn-bounce rounded-3xl px-5 py-4 font-display text-xl font-bold shadow-md ${tone}`}
+            >
+              {choice}
+            </button>
+          );
+        })}
+      </section>
+    </>
+  );
+}
+
+// --- Domino addition question ----------------------------------------------
+
+// Pip positions in a 3x3 grid (indices 0-8), dice-style for 0-6 and a filled
+// grid for 7-9.
+const PIP_LAYOUT: Record<number, number[]> = {
+  0: [],
+  1: [4],
+  2: [0, 8],
+  3: [0, 4, 8],
+  4: [0, 2, 6, 8],
+  5: [0, 2, 4, 6, 8],
+  6: [0, 2, 3, 5, 6, 8],
+  7: [0, 2, 3, 4, 5, 6, 8],
+  8: [0, 1, 2, 3, 5, 6, 7, 8],
+  9: [0, 1, 2, 3, 4, 5, 6, 7, 8],
+};
+
+function DominoHalf({ n }: { n: number }) {
+  const on = new Set(PIP_LAYOUT[n] ?? []);
+  return (
+    <div className="grid h-28 w-24 grid-cols-3 grid-rows-3 gap-1 p-3 sm:h-32 sm:w-28">
+      {Array.from({ length: 9 }).map((_, i) => (
+        <span
+          key={i}
+          className={`m-auto h-4 w-4 rounded-full sm:h-5 sm:w-5 ${
+            on.has(i) ? "bg-slate-800" : "bg-transparent"
+          }`}
+        />
+      ))}
+    </div>
+  );
+}
+
+function DominoQuestion({
+  question,
+  accent,
+  onComplete,
+}: {
+  question: Question;
+  accent: ReturnType<typeof accentFor>;
+  onComplete: (value: string) => void;
+}) {
+  const [chosen, setChosen] = useState<string | null>(null);
+  const locked = useRef(false);
+  const [a, b] = question.promptText.split("|").map(Number);
+
+  useEffect(() => {
+    speak(question.spoken);
+  }, [question.spoken]);
+
+  const answeredWrong = chosen !== null && chosen !== question.answer;
+  const answeredRight = chosen !== null && chosen === question.answer;
+
+  function choose(value: string) {
+    if (locked.current) return;
+    locked.current = true;
+    setChosen(value);
+    window.setTimeout(() => onComplete(value), 1100);
+  }
+
+  return (
+    <>
+      <section className="mt-6 flex flex-col items-center rounded-4xl bg-white px-6 py-8 shadow-lg">
+        <button
+          type="button"
+          onClick={() => speak(question.spoken)}
+          className={`btn-bounce mb-4 inline-flex items-center gap-2 rounded-full ${accent.soft} px-4 py-2 font-display ${accent.text}`}
+          aria-label="Hear it again"
+        >
+          🔊 Say it again
+        </button>
+
+        {/* The domino tile */}
+        <div
+          className={`flex items-stretch rounded-3xl border-4 border-slate-800 bg-white ${
+            answeredWrong ? "animate-shake" : ""
+          }`}
+        >
+          <DominoHalf n={a} />
+          <div className="w-1 bg-slate-800" />
+          <DominoHalf n={b} />
+        </div>
+
+        <p className="mt-4 font-display text-3xl font-bold text-slate-700 tabular-nums">
+          {a} + {b} = ?
+        </p>
+
+        {answeredWrong && (
+          <p className="mt-2 font-display text-2xl text-slate-500">
+            It&apos;s <span className="text-emerald-600">{question.answer}</span>
+          </p>
+        )}
+        {answeredRight && (
+          <p className="mt-2 animate-pop font-display text-2xl text-emerald-600">Yes! 🎉</p>
+        )}
+      </section>
+
+      <section className="mt-6 grid grid-cols-2 gap-4">
+        {question.choices.map((choice) => {
+          const isChosen = chosen === choice;
+          const isAnswer = choice === question.answer;
+          let tone = `bg-white ${accent.text} ring-2 ${accent.ring} hover:brightness-105`;
+          if (chosen !== null) {
+            if (isAnswer) tone = "bg-emerald-400 text-white ring-2 ring-emerald-400";
+            else if (isChosen) tone = "bg-rose-300 text-white ring-2 ring-rose-300";
+            else tone = "bg-white text-slate-300 ring-2 ring-slate-100";
+          }
+          return (
+            <button
+              key={choice}
+              type="button"
+              disabled={chosen !== null}
+              onClick={() => choose(choice)}
+              className={`btn-bounce rounded-4xl px-2 py-8 font-display text-5xl font-bold tabular-nums shadow-md ${tone}`}
             >
               {choice}
             </button>

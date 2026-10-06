@@ -1,6 +1,7 @@
 import type { Difficulty, Question, Subject } from "./types";
 import { WORD_PROBLEMS } from "./wordProblems";
 import { READING_PROMPTS } from "./readingPrompts";
+import { DIGRAPH_WORDS, DIGRAPH_CHOICES } from "./digraphs";
 
 // Standard lessons are 10 questions. Some games override this (story problems
 // are 5; reading is one story per lesson).
@@ -173,6 +174,65 @@ function generateFind(difficulty: Difficulty): Question[] {
   return out;
 }
 
+// --- Domino Addition (count both halves and add) ----------------------------
+
+// Highest number of pips per domino half, by difficulty.
+const DOMINO_MAX: Record<Difficulty, number> = { easy: 3, medium: 6, hard: 9 };
+
+function generateDomino(difficulty: Difficulty): Question[] {
+  const half = DOMINO_MAX[difficulty];
+  const maxSum = half * 2;
+  const out: Question[] = [];
+  let prev = "";
+  for (let i = 0; i < DEFAULT_QUESTIONS; i++) {
+    let a = randInt(0, half);
+    let b = randInt(0, half);
+    // Don't repeat the exact same tile back to back (either orientation).
+    while (`${a}|${b}` === prev || `${b}|${a}` === prev) {
+      a = randInt(0, half);
+      b = randInt(0, half);
+    }
+    prev = `${a}|${b}`;
+    const answer = a + b;
+    out.push({
+      id: crypto.randomUUID(),
+      kind: "domino",
+      difficulty,
+      spoken: "Count the dots and add them up!",
+      promptText: `${a}|${b}`, // the two halves, drawn as pips by the UI
+      answer: String(answer),
+      choices: numberChoices(answer, maxSum),
+    });
+  }
+  return out;
+}
+
+// --- Digraph Sounds (phonics: sh, ch, th, wh, ck, ng, ph) -------------------
+
+function generateDigraphs(difficulty: Difficulty): Question[] {
+  const pool = DIGRAPH_WORDS[difficulty];
+  const choicePool = DIGRAPH_CHOICES[difficulty];
+  const nChoices = Math.min(difficulty === "easy" ? 3 : 4, choicePool.length);
+  return shuffle(pool)
+    .slice(0, DEFAULT_QUESTIONS)
+    .map(({ word, emoji, digraph }) => {
+      const masked = word.replace(digraph, "＿＿");
+      const distractors = shuffle(choicePool.filter((d) => d !== digraph)).slice(
+        0,
+        nChoices - 1,
+      );
+      return {
+        id: crypto.randomUUID(),
+        kind: "choice" as const,
+        difficulty,
+        spoken: `The word is ${word}. Which two letters are missing?`,
+        promptText: `${emoji}  ${masked}`,
+        answer: digraph,
+        choices: shuffle([digraph, ...distractors]),
+      };
+    });
+}
+
 // --- Words (shared by Read the Word and Build a Word) ------------------------
 
 const WORDS = [
@@ -320,9 +380,11 @@ export interface GameDef {
 export const GAMES: GameDef[] = [
   { id: "math-add-sub", subject: "math", title: "Add & Subtract", emoji: "➕", color: "sky", generate: generateMath },
   { id: "count-tap", subject: "math", title: "Count & Tap", emoji: "🔢", color: "teal", generate: generateCount },
+  { id: "domino-add", subject: "math", title: "Domino Math", emoji: "🎲", color: "blue", generate: generateDomino },
   { id: "find-it", subject: "math", title: "Listen & Find", emoji: "👂", color: "cyan", generate: generateFind },
   { id: "story-problems", subject: "math", title: "Story Problems", emoji: "🧮", color: "amber", generate: generateStoryProblems },
   { id: "read-the-word", subject: "reading", title: "Read the Word", emoji: "📖", color: "indigo", generate: generateReadWord },
+  { id: "digraphs", subject: "reading", title: "Digraph Sounds", emoji: "🔤", color: "fuchsia", generate: generateDigraphs },
   { id: "story-time", subject: "reading", title: "Story Time", emoji: "📚", color: "rose", generate: generateStoryTime },
   { id: "build-a-word", subject: "writing", title: "Build a Word", emoji: "✏️", color: "violet", generate: generateSpell },
   { id: "tracing", subject: "writing", title: "Tracing", emoji: "✍️", color: "emerald", generate: generateTrace },

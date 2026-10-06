@@ -55,7 +55,7 @@ export interface Redemption {
   decidedAt?: string;
 }
 
-export type QuestionKind = "choice" | "spell" | "trace" | "reading";
+export type QuestionKind = "choice" | "spell" | "trace" | "reading" | "domino";
 
 export interface Question {
   id: string;
