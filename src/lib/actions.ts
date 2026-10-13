@@ -3,8 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { transaction } from "./db";
 import { currentFamilyId } from "./family";
-import { computeAward } from "./economy";
+import { computeAward, ACCURACY_GATE } from "./economy";
 import { getGame } from "./games";
+import { SPECIAL_REWARD, SPECIAL_REASON, periodStart } from "./lessons";
 import { startSession } from "./session";
 import type { Difficulty, Question } from "./types";
 
@@ -82,10 +83,30 @@ export async function finishSession(
     }
 
     const difficulty: Difficulty = session.questions[0]?.difficulty ?? "easy";
-    const award = computeAward({ correct, total, difficulty });
 
-    if (award.tokens > 0) {
-      await tx.addLedger(child.id, award.tokens, `${game.title} · ${difficulty}`);
+    let tokens: number;
+    let passed: boolean;
+
+    if (game.special) {
+      // Daily/Weekly: fixed reward, earnable once per period.
+      const accuracy = total > 0 ? correct / total : 0;
+      passed = accuracy >= ACCURACY_GATE;
+      const already = await tx.hasLedgerSince(
+        child.id,
+        SPECIAL_REASON[game.special],
+        periodStart(game.special),
+      );
+      tokens = passed && !already ? SPECIAL_REWARD[game.special] : 0;
+      if (tokens > 0) {
+        await tx.addLedger(child.id, tokens, SPECIAL_REASON[game.special]);
+      }
+    } else {
+      const award = computeAward({ correct, total, difficulty });
+      tokens = award.tokens;
+      passed = award.passed;
+      if (tokens > 0) {
+        await tx.addLedger(child.id, tokens, `${game.title} · ${difficulty}`);
+      }
     }
 
     await tx.markSessionFinished(session.id);
@@ -97,9 +118,9 @@ export async function finishSession(
       ok: true,
       correct,
       total,
-      tokens: award.tokens,
+      tokens,
       newBalance,
-      passed: award.passed,
+      passed,
       difficulty,
     };
   });

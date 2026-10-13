@@ -62,7 +62,7 @@ function isToday(iso: string): boolean {
 function scopedSnapshot(db: FileDB, familyId: string): DB {
   const f = (x: { familyId: string }) => x.familyId === familyId;
   return {
-    children: db.children.filter(f),
+    children: db.children.filter(f).map((c) => ({ ...c, hiddenGames: c.hiddenGames ?? [] })),
     ledger: db.ledger.filter(f),
     prizes: db.prizes.filter(f),
     redemptions: db.redemptions.filter(f),
@@ -75,7 +75,8 @@ function makeTx(db: FileDB, familyId: string): Tx {
   const inFamily = (x: { familyId: string }) => x.familyId === familyId;
   return {
     async getChild(id) {
-      return db.children.find((c) => c.id === id && inFamily(c)) ?? null;
+      const c = db.children.find((x) => x.id === id && inFamily(x));
+      return c ? { ...c, hiddenGames: c.hiddenGames ?? [] } : null;
     },
     async setChildMaxSum(id, maxSum) {
       const child = db.children.find((c) => c.id === id && inFamily(c));
@@ -100,6 +101,15 @@ function makeTx(db: FileDB, familyId: string): Tx {
       return db.ledger
         .filter((e) => e.childId === childId && inFamily(e) && e.delta > 0 && isToday(e.createdAt))
         .reduce((s, e) => s + e.delta, 0);
+    },
+    async hasLedgerSince(childId, reason, since) {
+      return db.ledger.some(
+        (e) =>
+          e.childId === childId &&
+          inFamily(e) &&
+          e.reason === reason &&
+          new Date(e.createdAt) >= since,
+      );
     },
     async resetTokens() {
       db.ledger = db.ledger.filter((e) => !inFamily(e));

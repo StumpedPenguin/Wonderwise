@@ -30,6 +30,7 @@ export const children = pgTable("children", {
   avatar: text("avatar").notNull(),
   color: text("color").notNull(),
   mathMaxSum: integer("math_max_sum").notNull().default(5),
+  hiddenGames: jsonb("hidden_games").$type<string[]>().notNull().default([]),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

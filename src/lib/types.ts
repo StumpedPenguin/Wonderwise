@@ -21,6 +21,8 @@ export interface Child {
   color: string; // a tailwind gradient pair id, e.g. "sky"
   /** Difficulty for math: the largest sum/minuend used. Adapts with accuracy. */
   mathMaxSum: number;
+  /** Game ids the grown-up has hidden for this kid (empty = all visible). */
+  hiddenGames: string[];
   createdAt: string;
 }
 

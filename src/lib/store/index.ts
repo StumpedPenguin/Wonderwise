@@ -33,6 +33,8 @@ export interface Tx {
   addLedger(childId: string, delta: number, reason: string): Promise<void>;
   balance(childId: string): Promise<number>;
   earnedToday(childId: string): Promise<number>;
+  /** True if a ledger entry with this reason exists for the child since `since`. */
+  hasLedgerSince(childId: string, reason: string, since: Date): Promise<boolean>;
   /** Wipe every token entry for this family — resets all balances to 0. */
   resetTokens(): Promise<void>;
 

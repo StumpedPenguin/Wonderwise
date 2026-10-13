@@ -10,6 +10,13 @@ interface KidData {
   name: string;
   avatar: string;
   color: string;
+  hiddenGames: string[];
+}
+
+export interface GameInfo {
+  id: string;
+  title: string;
+  emoji: string;
 }
 
 const AVATARS = ["🦊", "🐧", "🦁", "🐢", "🐼", "🐰", "🐸", "🦄", "🐙", "🐝", "🐨", "🦖"];
@@ -20,36 +27,45 @@ const COLORS = [
   { id: "indigo", label: "Indigo" },
 ];
 
-export function KidEditor({ kids }: { kids: KidData[] }) {
+export function KidEditor({ kids, allGames }: { kids: KidData[]; allGames: GameInfo[] }) {
   return (
     <div className="flex flex-col gap-3">
       {kids.map((kid) => (
-        <KidRow key={kid.id} kid={kid} />
+        <KidRow key={kid.id} kid={kid} allGames={allGames} />
       ))}
-      <KidRow />
+      <KidRow allGames={allGames} />
     </div>
   );
 }
 
-function KidRow({ kid }: { kid?: KidData }) {
+function KidRow({ kid, allGames }: { kid?: KidData; allGames: GameInfo[] }) {
   const router = useRouter();
   const isNew = !kid;
   const [name, setName] = useState(kid?.name ?? "");
   const [avatar, setAvatar] = useState(kid?.avatar ?? "🐣");
   const [color, setColor] = useState(kid?.color ?? "sky");
+  const [hidden, setHidden] = useState<string[]>(kid?.hiddenGames ?? []);
+  const [showGames, setShowGames] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [saving, start] = useTransition();
+
+  const isHidden = (id: string) => hidden.includes(id);
+  function toggleGame(id: string) {
+    setHidden((h) => (h.includes(id) ? h.filter((x) => x !== id) : [...h, id]));
+  }
 
   function save() {
     setMsg(null);
     start(async () => {
-      const res = await saveChild({ id: kid?.id, name, avatar, color });
+      const res = await saveChild({ id: kid?.id, name, avatar, color, hiddenGames: hidden });
       setMsg(res.message);
       if (res.ok) {
         if (isNew) {
           setName("");
           setAvatar("🐣");
           setColor("sky");
+          setHidden([]);
+          setShowGames(false);
         }
         router.refresh();
       }
@@ -98,6 +114,44 @@ function KidRow({ kid }: { kid?: KidData }) {
           </button>
         ))}
       </div>
+
+      {/* Per-kid game visibility */}
+      {!isNew && (
+        <div className="mt-3">
+          <button
+            type="button"
+            onClick={() => setShowGames((s) => !s)}
+            className="font-display text-sm font-bold text-sky-500 hover:text-sky-600"
+          >
+            {showGames ? "▾ " : "▸ "}
+            Games {hidden.length > 0 && <span className="text-slate-400">({hidden.length} hidden)</span>}
+          </button>
+          {showGames && (
+            <div className="mt-2 flex flex-wrap gap-2">
+              {allGames.map((g) => {
+                const off = isHidden(g.id);
+                return (
+                  <button
+                    key={g.id}
+                    type="button"
+                    onClick={() => toggleGame(g.id)}
+                    className={`btn-bounce inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 font-display text-sm shadow-sm ${
+                      off
+                        ? "bg-slate-100 text-slate-400 line-through ring-1 ring-slate-200"
+                        : "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
+                    }`}
+                    title={off ? "Hidden — tap to show" : "Shown — tap to hide"}
+                  >
+                    <span>{g.emoji}</span>
+                    {g.title}
+                    <span>{off ? "🚫" : "✓"}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
         {COLORS.map((c) => (

@@ -1,5 +1,5 @@
 import { transaction, listContent } from "./db";
-import { getGame } from "./games";
+import { getGame, buildMixedLesson } from "./games";
 import type { Difficulty, GameSession, Question } from "./types";
 
 // Starts a round for a child + game at a difficulty, within one family.
@@ -9,10 +9,13 @@ export async function startSession(
   gameId: string,
   difficulty: Difficulty,
 ): Promise<GameSession | null> {
+  const game = getGame(gameId);
   const questions =
-    gameId === "read-answer"
-      ? await buildReadAnswer(familyId, difficulty)
-      : (getGame(gameId)?.generate(difficulty) ?? null);
+    game?.special
+      ? buildMixedLesson(game.special)
+      : gameId === "read-answer"
+        ? await buildReadAnswer(familyId, difficulty)
+        : (game?.generate(difficulty) ?? null);
 
   if (!questions || questions.length === 0) return null;
 

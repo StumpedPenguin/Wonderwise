@@ -37,6 +37,7 @@ export default async function GamePage({
         childName={child.name}
         color={game.color}
         gameId={game.id}
+        special={game.special}
       />
     </main>
   );

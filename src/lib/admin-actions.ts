@@ -29,12 +29,14 @@ export async function saveChild(input: {
   name: string;
   avatar: string;
   color: string;
+  hiddenGames?: string[];
 }): Promise<AdminResult> {
   if (!(await requireParent())) return DENIED;
 
   const name = input.name.trim();
   const avatar = input.avatar.trim() || "🐣";
   const color = COLORS.includes(input.color) ? input.color : "sky";
+  const hiddenGames = Array.isArray(input.hiddenGames) ? input.hiddenGames : undefined;
   if (!name) return { ok: false, message: "Please enter a name." };
 
   const familyId = await currentFamilyId();
@@ -42,7 +44,13 @@ export async function saveChild(input: {
     if (input.id) {
       const existing = await tx.getChild(input.id);
       if (!existing) return { ok: false, message: "That kid no longer exists." };
-      await tx.upsertChild({ ...existing, name, avatar, color });
+      await tx.upsertChild({
+        ...existing,
+        name,
+        avatar,
+        color,
+        hiddenGames: hiddenGames ?? existing.hiddenGames ?? [],
+      });
     } else {
       const child: Child = {
         id: `child-${crypto.randomUUID().slice(0, 8)}`,
@@ -51,6 +59,7 @@ export async function saveChild(input: {
         avatar,
         color,
         mathMaxSum: 5,
+        hiddenGames: hiddenGames ?? [],
         createdAt: new Date().toISOString(),
       };
       await tx.upsertChild(child);

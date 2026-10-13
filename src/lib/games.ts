@@ -2,6 +2,7 @@ import type { Difficulty, Question, Subject } from "./types";
 import { WORD_PROBLEMS } from "./wordProblems";
 import { READING_PROMPTS } from "./readingPrompts";
 import { DIGRAPH_WORDS, DIGRAPH_CHOICES } from "./digraphs";
+import { SPECIAL_COUNT, periodKey, hashString, type LessonKind } from "./lessons";
 
 // Standard lessons are 10 questions. Some games override this (story problems
 // are 5; reading is one story per lesson).
@@ -176,8 +177,9 @@ function generateFind(difficulty: Difficulty): Question[] {
 
 // --- Domino Addition (count both halves and add) ----------------------------
 
-// Highest number of pips per domino half, by difficulty.
-const DOMINO_MAX: Record<Difficulty, number> = { easy: 3, medium: 6, hard: 9 };
+// Highest number of pips per domino half, by difficulty. A standard domino set
+// tops out at six pips a side, so no half ever exceeds 6.
+const DOMINO_MAX: Record<Difficulty, number> = { easy: 3, medium: 5, hard: 6 };
 
 function generateDomino(difficulty: Difficulty): Question[] {
   const half = DOMINO_MAX[difficulty];
@@ -242,12 +244,22 @@ const WORDS = [
   { w: "cup", e: "🥤" }, { w: "bus", e: "🚌" }, { w: "box", e: "📦" },
   { w: "fox", e: "🦊" }, { w: "pen", e: "🖊️" }, { w: "bag", e: "🎒" },
   { w: "hen", e: "🐔" }, { w: "bee", e: "🐝" }, { w: "owl", e: "🦉" },
+  { w: "ant", e: "🐜" }, { w: "cow", e: "🐮" }, { w: "van", e: "🚐" },
+  { w: "key", e: "🔑" }, { w: "map", e: "🗺️" }, { w: "mug", e: "☕" },
+  { w: "bat", e: "🦇" }, { w: "car", e: "🚗" }, { w: "cap", e: "🧢" },
+  { w: "egg", e: "🥚" }, { w: "web", e: "🕸️" }, { w: "saw", e: "🪚" },
+  { w: "axe", e: "🪓" }, { w: "pie", e: "🥧" }, { w: "ear", e: "👂" },
   // 4-letter
   { w: "fish", e: "🐟" }, { w: "frog", e: "🐸" }, { w: "star", e: "⭐" },
   { w: "moon", e: "🌙" }, { w: "cake", e: "🍰" }, { w: "ball", e: "⚽" },
   { w: "bird", e: "🐦" }, { w: "tree", e: "🌳" }, { w: "boat", e: "⛵" },
   { w: "milk", e: "🥛" }, { w: "duck", e: "🦆" }, { w: "lion", e: "🦁" },
   { w: "bear", e: "🐻" }, { w: "corn", e: "🌽" }, { w: "leaf", e: "🍃" },
+  { w: "drum", e: "🥁" }, { w: "lamp", e: "💡" }, { w: "sock", e: "🧦" },
+  { w: "ring", e: "💍" }, { w: "door", e: "🚪" }, { w: "bell", e: "🔔" },
+  { w: "book", e: "📖" }, { w: "hand", e: "✋" }, { w: "snow", e: "❄️" },
+  { w: "king", e: "🤴" }, { w: "crab", e: "🦀" }, { w: "goat", e: "🐐" },
+  { w: "kite", e: "🪁" }, { w: "gift", e: "🎁" }, { w: "rose", e: "🌹" },
 ];
 
 const ALPHABET = "abcdefghijklmnopqrstuvwxyz".split("");
@@ -366,6 +378,73 @@ function generateStoryTime(difficulty: Difficulty): Question[] {
   }));
 }
 
+// --- Daily / Weekly mixed lessons -------------------------------------------
+
+// Regular games the mixed lessons draw from (not the specials or AI content).
+const MIX_GAME_IDS = [
+  "math-add-sub",
+  "count-tap",
+  "domino-add",
+  "find-it",
+  "story-problems",
+  "read-the-word",
+  "digraphs",
+  "build-a-word",
+  "story-time",
+  "tracing",
+];
+
+// Run `fn` with Math.random replaced by a seeded generator, so the content is
+// identical for a given seed (same for everyone that day/week) and restored
+// afterwards. Generation is synchronous, so nothing else observes the swap.
+function withSeed<T>(seed: number, fn: () => T): T {
+  const orig = Math.random;
+  let s = seed >>> 0;
+  Math.random = () => {
+    s = (Math.imul(s, 1664525) + 1013904223) >>> 0;
+    return s / 4294967296;
+  };
+  try {
+    return fn();
+  } finally {
+    Math.random = orig;
+  }
+}
+
+/**
+ * Build a mixed lesson of medium/hard questions pulled from across the games.
+ * Seeded from the current day (daily) or week (weekly) so it rotates on its own
+ * and is the same for every child in that period.
+ */
+export function buildMixedLesson(kind: LessonKind): Question[] {
+  const count = SPECIAL_COUNT[kind];
+  const seed = hashString(`${kind}:${periodKey(kind)}`);
+  return withSeed(seed, () => {
+    const buckets: Question[][] = [];
+    for (const id of MIX_GAME_IDS) {
+      const g = getGame(id);
+      if (!g) continue;
+      const diff: Difficulty = Math.random() < 0.5 ? "medium" : "hard";
+      buckets.push(g.generate(diff));
+    }
+    // Round-robin across games so each pass takes one question from each —
+    // a balanced, varied mix.
+    const out: Question[] = [];
+    for (let i = 0; out.length < count; i++) {
+      let added = false;
+      for (const b of buckets) {
+        if (b[i] !== undefined) {
+          out.push(b[i]);
+          added = true;
+          if (out.length >= count) break;
+        }
+      }
+      if (!added) break; // ran out of questions
+    }
+    return out;
+  });
+}
+
 // --- Registry ---------------------------------------------------------------
 
 export interface GameDef {
@@ -375,6 +454,8 @@ export interface GameDef {
   emoji: string;
   color: string;
   generate: (difficulty: Difficulty) => Question[];
+  /** Special mixed lessons: no difficulty picker, fixed reward, once per period. */
+  special?: LessonKind;
 }
 
 export const GAMES: GameDef[] = [
@@ -391,6 +472,9 @@ export const GAMES: GameDef[] = [
   // Read & Answer is built from approved AI content in startSession, so its
   // generate() is never called — it's here for the picker, title, and colors.
   { id: "read-answer", subject: "reading", title: "Read & Answer", emoji: "🤖", color: "sky", generate: () => [] },
+  // Special mixed lessons — built in startSession from buildMixedLesson.
+  { id: "daily", subject: "math", title: "Daily Lesson", emoji: "🌟", color: "amber", generate: () => [], special: "daily" },
+  { id: "weekly", subject: "math", title: "Weekly Lesson", emoji: "🏆", color: "violet", generate: () => [], special: "weekly" },
 ];
 
 export function getGame(id: string): GameDef | undefined {

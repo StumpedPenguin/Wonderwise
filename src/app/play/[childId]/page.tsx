@@ -4,6 +4,7 @@ import { readDB, balanceOf, listContent } from "@/lib/db";
 import { requireFamily } from "@/lib/family";
 import { gradientFor, accentFor } from "@/lib/theme";
 import { GAMES } from "@/lib/games";
+import { SPECIAL_REWARD, lessonDone } from "@/lib/lessons";
 import { TokenBadge } from "@/components/TokenBadge";
 
 export const dynamic = "force-dynamic";
@@ -38,7 +39,13 @@ export default async function Dashboard({
   } catch {
     hasReading = false;
   }
-  const games = GAMES.filter((g) => g.id !== "read-answer" || hasReading);
+  const hidden = new Set(child.hiddenGames ?? []);
+  const games = GAMES.filter(
+    (g) => !g.special && (g.id !== "read-answer" || hasReading) && !hidden.has(g.id),
+  );
+
+  const dailyDone = lessonDone(db.ledger, child.id, "daily");
+  const weeklyDone = lessonDone(db.ledger, child.id, "weekly");
 
   return (
     <main className="mx-auto flex min-h-full w-full max-w-2xl flex-col px-5 py-8">
@@ -64,6 +71,28 @@ export default async function Dashboard({
         <div className="mt-2">
           <TokenBadge amount={balance} size="lg" />
         </div>
+      </section>
+
+      {/* Daily & Weekly challenges */}
+      <section className="mt-6 grid grid-cols-2 gap-4">
+        <LessonCard
+          childId={child.id}
+          kind="daily"
+          emoji="🌟"
+          title="Daily Lesson"
+          reward={SPECIAL_REWARD.daily}
+          done={dailyDone}
+          tone="from-amber-400 to-orange-500"
+        />
+        <LessonCard
+          childId={child.id}
+          kind="weekly"
+          emoji="🏆"
+          title="Weekly Lesson"
+          reward={SPECIAL_REWARD.weekly}
+          done={weeklyDone}
+          tone="from-violet-400 to-fuchsia-500"
+        />
       </section>
 
       <h2 className="mt-7 font-display text-2xl font-bold text-slate-600">
@@ -103,5 +132,47 @@ export default async function Dashboard({
         )}
       </Link>
     </main>
+  );
+}
+
+function LessonCard({
+  childId,
+  kind,
+  emoji,
+  title,
+  reward,
+  done,
+  tone,
+}: {
+  childId: string;
+  kind: "daily" | "weekly";
+  emoji: string;
+  title: string;
+  reward: number;
+  done: boolean;
+  tone: string;
+}) {
+  if (done) {
+    return (
+      <div className="relative flex flex-col items-center justify-center gap-1 rounded-4xl bg-white p-5 text-center shadow-md ring-2 ring-slate-100">
+        <span className="text-4xl grayscale">{emoji}</span>
+        <span className="font-display text-base font-bold text-slate-400">{title}</span>
+        <span className="rounded-full bg-emerald-100 px-3 py-0.5 text-xs font-bold text-emerald-600">
+          ✓ Done
+        </span>
+      </div>
+    );
+  }
+  return (
+    <Link
+      href={`/play/${childId}/game/${kind}`}
+      className={`btn-bounce flex flex-col items-center justify-center gap-1 rounded-4xl bg-gradient-to-br ${tone} p-5 text-center text-white shadow-md`}
+    >
+      <span className="text-4xl">{emoji}</span>
+      <span className="font-display text-base font-bold">{title}</span>
+      <span className="inline-flex items-center gap-1 rounded-full bg-white/25 px-3 py-0.5 text-sm font-bold">
+        {reward} 🪙
+      </span>
+    </Link>
   );
 }

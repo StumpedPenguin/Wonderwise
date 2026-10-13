@@ -62,6 +62,7 @@ function toChild(r: typeof schema.children.$inferSelect): Child {
     avatar: r.avatar,
     color: r.color,
     mathMaxSum: r.mathMaxSum,
+    hiddenGames: (r.hiddenGames as string[] | null) ?? [],
     createdAt: iso(r.createdAt)!,
   };
 }
@@ -181,6 +182,21 @@ function makeTx(tx: Transaction, familyId: string): Tx {
         );
       return Number(row?.total ?? 0);
     },
+    async hasLedgerSince(childId, reason, since) {
+      const [row] = await tx
+        .select({ id: L.id })
+        .from(L)
+        .where(
+          and(
+            eq(L.childId, childId),
+            eq(L.familyId, familyId),
+            eq(L.reason, reason),
+            gte(L.createdAt, since),
+          ),
+        )
+        .limit(1);
+      return !!row;
+    },
     async resetTokens() {
       await tx.delete(L).where(eq(L.familyId, familyId));
     },
@@ -250,10 +266,17 @@ function makeTx(tx: Transaction, familyId: string): Tx {
           avatar: child.avatar,
           color: child.color,
           mathMaxSum: child.mathMaxSum,
+          hiddenGames: child.hiddenGames ?? [],
         })
         .onConflictDoUpdate({
           target: C.id,
-          set: { name: child.name, avatar: child.avatar, color: child.color, mathMaxSum: child.mathMaxSum },
+          set: {
+            name: child.name,
+            avatar: child.avatar,
+            color: child.color,
+            mathMaxSum: child.mathMaxSum,
+            hiddenGames: child.hiddenGames ?? [],
+          },
         });
     },
     async deleteChild(id) {

@@ -7,6 +7,7 @@ import { SignOutButton } from "@/components/SignOutButton";
 import { KidEditor } from "@/components/KidEditor";
 import { PrizeEditor } from "@/components/PrizeEditor";
 import { ResetTokensButton } from "@/components/ResetTokensButton";
+import { GAMES } from "@/lib/games";
 
 export const dynamic = "force-dynamic";
 
@@ -132,6 +133,12 @@ export default async function ParentPage() {
               name: c.name,
               avatar: c.avatar,
               color: c.color,
+              hiddenGames: c.hiddenGames ?? [],
+            }))}
+            allGames={GAMES.filter((g) => !g.special).map((g) => ({
+              id: g.id,
+              title: g.title,
+              emoji: g.emoji,
             }))}
           />
         </div>

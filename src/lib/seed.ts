@@ -16,8 +16,8 @@ export function seedData(): DB {
   const familyId = DEFAULT_FAMILY_ID;
   return {
     children: [
-      { id: "child-fox", familyId, name: "Fox", avatar: "🦊", color: "sky", mathMaxSum: 5, createdAt: now },
-      { id: "child-penguin", familyId, name: "Penguin", avatar: "🐧", color: "violet", mathMaxSum: 10, createdAt: now },
+      { id: "child-fox", familyId, name: "Fox", avatar: "🦊", color: "sky", mathMaxSum: 5, hiddenGames: [], createdAt: now },
+      { id: "child-penguin", familyId, name: "Penguin", avatar: "🐧", color: "violet", mathMaxSum: 10, hiddenGames: [], createdAt: now },
     ],
     ledger: [],
     prizes: [

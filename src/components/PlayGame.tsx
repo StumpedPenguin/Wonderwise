@@ -24,14 +24,17 @@ export function PlayGame({
   childName,
   color,
   gameId,
+  special,
 }: {
   childId: string;
   childName: string;
   color: string;
   gameId: string;
+  special?: "daily" | "weekly";
 }) {
   const accent = accentFor(color);
-  const [phase, setPhase] = useState<Phase>("choosing");
+  // Special lessons skip the difficulty picker and start straight away.
+  const [phase, setPhase] = useState<Phase>(special ? "loading" : "choosing");
   const [index, setIndex] = useState(0);
   const [sessionId, setSessionId] = useState("");
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -62,7 +65,14 @@ export function PlayGame({
     [childId, gameId],
   );
 
-  const silent = questions[0]?.silent ?? false;
+  // Auto-start special lessons (no difficulty picker). Difficulty is ignored
+  // server-side for specials, so any value works.
+  useEffect(() => {
+    if (special) pick("medium");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const silent = special ? false : (questions[0]?.silent ?? false);
 
   useEffect(() => {
     if (phase === "done" && result && !silent) {
@@ -95,7 +105,7 @@ export function PlayGame({
 
   if (phase === "done" && result) {
     return (
-      <RewardScreen childId={childId} gameId={gameId} color={color} result={result} />
+      <RewardScreen childId={childId} gameId={gameId} color={color} result={result} special={special} />
     );
   }
   if (phase === "finishing") {
@@ -862,13 +872,17 @@ function RewardScreen({
   gameId,
   color,
   result,
+  special,
 }: {
   childId: string;
   gameId: string;
   color: string;
   result: FinishResult;
+  special?: "daily" | "weekly";
 }) {
   const accent = accentFor(color);
+  // Passed a special lesson but earned nothing = already done this period.
+  const alreadyEarned = !!special && result.passed && result.tokens === 0;
   return (
     <div className="relative grid flex-1 place-items-center overflow-hidden text-center">
       {result.tokens > 0 &&
@@ -903,7 +917,12 @@ function RewardScreen({
           {result.correct} / {result.total} correct
         </p>
 
-        {result.passed ? (
+        {alreadyEarned ? (
+          <p className="mt-5 rounded-2xl bg-sky-50 px-4 py-3 font-display text-sky-700">
+            Great job! You already earned this one — come back{" "}
+            {special === "weekly" ? "next week" : "tomorrow"}! 😊
+          </p>
+        ) : result.passed ? (
           <div className="mt-5">
             <p className="text-slate-500">You earned</p>
             <div className="mt-1">
@@ -917,13 +936,15 @@ function RewardScreen({
         )}
 
         <div className="mt-7 flex flex-col gap-3 sm:flex-row">
-          {/* Full navigation → a fresh round mounts cleanly. */}
-          <a
-            href={`/play/${childId}/game/${gameId}`}
-            className={`btn-bounce rounded-full ${accent.solid} px-6 py-3 font-display text-lg font-bold text-white shadow-md`}
-          >
-            🔁 Play again
-          </a>
+          {/* Specials don't replay (same questions, already earned). */}
+          {!special && (
+            <a
+              href={`/play/${childId}/game/${gameId}`}
+              className={`btn-bounce rounded-full ${accent.solid} px-6 py-3 font-display text-lg font-bold text-white shadow-md`}
+            >
+              🔁 Play again
+            </a>
+          )}
           <Link
             href={`/play/${childId}`}
             className="btn-bounce rounded-full bg-white px-6 py-3 font-display text-lg font-bold text-slate-600 shadow-md ring-2 ring-slate-100"
