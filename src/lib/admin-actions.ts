@@ -60,6 +60,8 @@ export async function saveChild(input: {
         color,
         mathMaxSum: 5,
         hiddenGames: hiddenGames ?? [],
+        goalPrizeId: null,
+        skillLevels: {},
         createdAt: new Date().toISOString(),
       };
       await tx.upsertChild(child);

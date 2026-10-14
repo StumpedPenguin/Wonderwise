@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { requestRedemption } from "@/lib/actions";
+import { useRouter } from "next/navigation";
+import { requestRedemption, setGoal } from "@/lib/actions";
 import { TokenBadge } from "./TokenBadge";
 
 export function PrizeCard({
@@ -12,6 +13,7 @@ export function PrizeCard({
   cost,
   balance,
   initiallyPending,
+  isGoal,
 }: {
   childId: string;
   prizeId: string;
@@ -20,10 +22,13 @@ export function PrizeCard({
   cost: number;
   balance: number;
   initiallyPending: boolean;
+  isGoal: boolean;
 }) {
+  const router = useRouter();
   const [pending, setPending] = useState(initiallyPending);
   const [message, setMessage] = useState<string | null>(null);
   const [isSaving, startTransition] = useTransition();
+  const [goalBusy, startGoal] = useTransition();
 
   const canAfford = balance >= cost;
 
@@ -35,8 +40,29 @@ export function PrizeCard({
     });
   }
 
+  function toggleGoal() {
+    startGoal(async () => {
+      await setGoal(childId, isGoal ? null : prizeId);
+      router.refresh();
+    });
+  }
+
   return (
-    <div className="flex flex-col items-center rounded-4xl bg-white p-5 text-center shadow-md ring-2 ring-violet-50">
+    <div
+      className={`relative flex flex-col items-center rounded-4xl bg-white p-5 text-center shadow-md ring-2 ${
+        isGoal ? "ring-amber-300" : "ring-violet-50"
+      }`}
+    >
+      <button
+        type="button"
+        onClick={toggleGoal}
+        disabled={goalBusy}
+        aria-label={isGoal ? "Remove savings goal" : "Save toward this prize"}
+        title={isGoal ? "This is your goal" : "Make this my goal"}
+        className="btn-bounce absolute right-3 top-3 text-2xl"
+      >
+        {isGoal ? "⭐" : "☆"}
+      </button>
       <span className="text-6xl">{emoji}</span>
       <h3 className="mt-2 font-display text-xl font-bold text-slate-700">{name}</h3>
       <div className="mt-2">

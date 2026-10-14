@@ -19,18 +19,23 @@ const LEVELS: { id: Difficulty; label: string; per: number; tone: string }[] = [
 // Tokens are awarded per LESSON (not per question), so "Hard = 5" means the
 // child earns 5 tokens for finishing a hard lesson with 80%+ correct.
 
+const LEVEL_LABEL: Record<Difficulty, string> = { easy: "Easy", medium: "Medium", hard: "Hard" };
+const LEVEL_PER: Record<Difficulty, number> = { easy: 1, medium: 3, hard: 5 };
+
 export function PlayGame({
   childId,
   childName,
   color,
   gameId,
   special,
+  autoLevel = "easy",
 }: {
   childId: string;
   childName: string;
   color: string;
   gameId: string;
   special?: "daily" | "weekly";
+  autoLevel?: Difficulty;
 }) {
   const accent = accentFor(color);
   // Special lessons skip the difficulty picker and start straight away.
@@ -47,7 +52,7 @@ export function PlayGame({
   // so the server render stays pure and a later revalidation never clears the
   // reward screen.
   const pick = useCallback(
-    (difficulty: Difficulty) => {
+    (difficulty: Difficulty | "auto") => {
       setPhase("loading");
       (async () => {
         const res = await startGame(childId, gameId, difficulty);
@@ -120,6 +125,22 @@ export function PlayGame({
       <div className="flex flex-1 flex-col items-center justify-center gap-5 py-8">
         <p className="font-display text-3xl font-bold text-slate-600">Pick a level!</p>
         <div className="grid w-full max-w-sm gap-4">
+          {/* Auto — adaptive, "just right" for this kid. */}
+          <button
+            type="button"
+            onClick={() => pick("auto")}
+            className={`btn-bounce flex items-center justify-between rounded-4xl bg-gradient-to-br ${accent.grad} px-6 py-5 text-white shadow-lg ring-4 ring-white/40`}
+          >
+            <span className="flex flex-col text-left">
+              <span className="font-display text-2xl font-bold">⭐ Just Right</span>
+              <span className="font-display text-sm text-white/80">
+                Picks {LEVEL_LABEL[autoLevel]} for you
+              </span>
+            </span>
+            <span className="inline-flex items-center gap-1 rounded-full bg-white/25 px-3 py-1 font-display font-bold">
+              {LEVEL_PER[autoLevel]} 🪙
+            </span>
+          </button>
           {LEVELS.map((lvl) => (
             <button
               key={lvl.id}

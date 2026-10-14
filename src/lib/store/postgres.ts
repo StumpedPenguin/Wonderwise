@@ -16,6 +16,7 @@ import type {
   ContentItem,
   ContentStatus,
   DB,
+  Difficulty,
   Family,
   GameSession,
   LedgerEntry,
@@ -63,6 +64,8 @@ function toChild(r: typeof schema.children.$inferSelect): Child {
     color: r.color,
     mathMaxSum: r.mathMaxSum,
     hiddenGames: (r.hiddenGames as string[] | null) ?? [],
+    goalPrizeId: r.goalPrizeId ?? null,
+    skillLevels: (r.skillLevels as Record<string, Difficulty> | null) ?? {},
     createdAt: iso(r.createdAt)!,
   };
 }
@@ -267,6 +270,8 @@ function makeTx(tx: Transaction, familyId: string): Tx {
           color: child.color,
           mathMaxSum: child.mathMaxSum,
           hiddenGames: child.hiddenGames ?? [],
+          goalPrizeId: child.goalPrizeId ?? null,
+          skillLevels: child.skillLevels ?? {},
         })
         .onConflictDoUpdate({
           target: C.id,
@@ -276,6 +281,8 @@ function makeTx(tx: Transaction, familyId: string): Tx {
             color: child.color,
             mathMaxSum: child.mathMaxSum,
             hiddenGames: child.hiddenGames ?? [],
+            goalPrizeId: child.goalPrizeId ?? null,
+            skillLevels: child.skillLevels ?? {},
           },
         });
     },

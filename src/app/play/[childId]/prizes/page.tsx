@@ -5,6 +5,7 @@ import { requireFamily } from "@/lib/family";
 import { TokenBadge } from "@/components/TokenBadge";
 import { PrizeCard } from "@/components/PrizeCard";
 import { ClaimButton } from "@/components/ClaimButton";
+import { GoalBar } from "@/components/GoalBar";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +26,9 @@ export default async function PrizesPage({
       .map((r) => r.prizeId),
   );
   const prizes = db.prizes.filter((p) => p.active);
+  const goalPrize = child.goalPrizeId
+    ? db.prizes.find((p) => p.id === child.goalPrizeId && p.active)
+    : undefined;
 
   // Prizes the child has won (approved) or already used (claimed).
   const won = db.redemptions
@@ -46,6 +50,13 @@ export default async function PrizesPage({
         </Link>
         <TokenBadge amount={balance} size="md" />
       </div>
+
+      {/* Savings goal */}
+      {goalPrize && (
+        <div className="mt-6">
+          <GoalBar emoji={goalPrize.emoji} name={goalPrize.name} cost={goalPrize.cost} balance={balance} />
+        </div>
+      )}
 
       {/* My Prizes — what the child has won */}
       {won.length > 0 && (
@@ -99,6 +110,7 @@ export default async function PrizesPage({
             cost={prize.cost}
             balance={balance}
             initiallyPending={pendingPrizeIds.has(prize.id)}
+            isGoal={child.goalPrizeId === prize.id}
           />
         ))}
       </section>

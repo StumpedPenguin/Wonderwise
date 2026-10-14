@@ -38,6 +38,7 @@ export default async function GamePage({
         color={game.color}
         gameId={game.id}
         special={game.special}
+        autoLevel={child.skillLevels?.[game.id] ?? "easy"}
       />
     </main>
   );

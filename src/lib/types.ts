@@ -23,6 +23,10 @@ export interface Child {
   mathMaxSum: number;
   /** Game ids the grown-up has hidden for this kid (empty = all visible). */
   hiddenGames: string[];
+  /** The prize this kid is saving toward (shows a progress bar). */
+  goalPrizeId: string | null;
+  /** Adaptive difficulty: the recommended level per game, nudged by results. */
+  skillLevels: Record<string, Difficulty>;
   createdAt: string;
 }
 

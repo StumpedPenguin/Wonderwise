@@ -1,9 +1,9 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { transaction } from "./db";
+import { transaction, getChild } from "./db";
 import { currentFamilyId } from "./family";
-import { computeAward, ACCURACY_GATE } from "./economy";
+import { computeAward, ACCURACY_GATE, nextLevel } from "./economy";
 import { getGame } from "./games";
 import { SPECIAL_REWARD, SPECIAL_REASON, periodStart } from "./lessons";
 import { startSession } from "./session";
@@ -13,21 +13,31 @@ export interface StartResult {
   ok: boolean;
   sessionId: string;
   questions: Question[];
+  /** The difficulty actually played (useful when "auto" resolved it). */
+  level: Difficulty;
 }
 
 /**
  * Start a round from the client, so the game page stays a pure render and the
  * reward screen isn't remounted (and cleared) when a later action revalidates.
+ * Difficulty "auto" resolves to the kid's adaptive level for this game.
  */
 export async function startGame(
   childId: string,
   gameId: string,
-  difficulty: Difficulty,
+  difficulty: Difficulty | "auto",
 ): Promise<StartResult> {
   const familyId = await currentFamilyId();
-  const session = await startSession(familyId, childId, gameId, difficulty);
-  if (!session) return { ok: false, sessionId: "", questions: [] };
-  return { ok: true, sessionId: session.id, questions: session.questions };
+  let level: Difficulty;
+  if (difficulty === "auto") {
+    const child = await getChild(familyId, childId);
+    level = child?.skillLevels?.[gameId] ?? "easy";
+  } else {
+    level = difficulty;
+  }
+  const session = await startSession(familyId, childId, gameId, level);
+  if (!session) return { ok: false, sessionId: "", questions: [], level };
+  return { ok: true, sessionId: session.id, questions: session.questions, level };
 }
 
 // ---------------------------------------------------------------------------
@@ -107,6 +117,14 @@ export async function finishSession(
       if (tokens > 0) {
         await tx.addLedger(child.id, tokens, `${game.title} · ${difficulty}`);
       }
+      // Adaptive difficulty: nudge this game's recommended level by how it went.
+      const recommended = nextLevel(difficulty, award.accuracy);
+      if (child.skillLevels?.[session.gameId] !== recommended) {
+        await tx.upsertChild({
+          ...child,
+          skillLevels: { ...child.skillLevels, [session.gameId]: recommended },
+        });
+      }
     }
 
     await tx.markSessionFinished(session.id);
@@ -123,6 +141,22 @@ export async function finishSession(
       passed,
       difficulty,
     };
+  });
+}
+
+/** A child picks (or clears) the prize they're saving toward. */
+export async function setGoal(
+  childId: string,
+  prizeId: string | null,
+): Promise<{ ok: boolean }> {
+  const familyId = await currentFamilyId();
+  return transaction(familyId, async (tx) => {
+    const child = await tx.getChild(childId);
+    if (!child) return { ok: false };
+    await tx.upsertChild({ ...child, goalPrizeId: prizeId });
+    revalidatePath(`/play/${childId}`);
+    revalidatePath(`/play/${childId}/prizes`);
+    return { ok: true };
   });
 }
 

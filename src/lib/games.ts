@@ -2,6 +2,7 @@ import type { Difficulty, Question, Subject } from "./types";
 import { WORD_PROBLEMS } from "./wordProblems";
 import { READING_PROMPTS } from "./readingPrompts";
 import { DIGRAPH_WORDS, DIGRAPH_CHOICES } from "./digraphs";
+import { SIGHT_WORDS } from "./sightWords";
 import { SPECIAL_COUNT, periodKey, hashString, type LessonKind } from "./lessons";
 
 // Standard lessons are 10 questions. Some games override this (story problems
@@ -574,6 +575,35 @@ function generateHunt(difficulty: Difficulty): Question[] {
   return out;
 }
 
+// --- Sight Words (Dolch word recognition) -----------------------------------
+
+function generateSightWords(difficulty: Difficulty): Question[] {
+  const pool = SIGHT_WORDS[difficulty];
+  const nChoices = difficulty === "easy" ? 3 : 4;
+  const out: Question[] = [];
+  let prev = "";
+  for (let i = 0; i < DEFAULT_QUESTIONS; i++) {
+    let target = pool[randInt(0, pool.length - 1)];
+    while (target === prev) target = pool[randInt(0, pool.length - 1)];
+    prev = target;
+    // Prefer look-alike distractors (same first letter) to make it a real
+    // reading test, then fill with any other words.
+    const sameStart = shuffle(pool.filter((w) => w !== target && w[0] === target[0]));
+    const others = shuffle(pool.filter((w) => w !== target && w[0] !== target[0]));
+    const distractors = [...sameStart, ...others].slice(0, nChoices - 1);
+    out.push({
+      id: crypto.randomUUID(),
+      kind: "choice",
+      difficulty,
+      spoken: `Find the word ${target}.`,
+      promptText: "👂",
+      answer: target,
+      choices: shuffle([target, ...distractors]),
+    });
+  }
+  return out;
+}
+
 // --- Memory Match -----------------------------------------------------------
 
 const MEMORY_PAIRS: Record<Difficulty, number> = { easy: 3, medium: 4, hard: 5 };
@@ -633,6 +663,7 @@ const MIX_GAME_IDS = [
   "read-the-word",
   "digraphs",
   "big-little",
+  "sight-words",
   "letter-hunt",
   "build-a-word",
   "story-time",
@@ -718,6 +749,7 @@ export const GAMES: GameDef[] = [
   { id: "read-the-word", subject: "reading", title: "Read the Word", emoji: "📖", color: "indigo", generate: generateReadWord },
   { id: "digraphs", subject: "reading", title: "Digraph Sounds", emoji: "🔤", color: "fuchsia", generate: generateDigraphs },
   { id: "big-little", subject: "reading", title: "Big & Little", emoji: "🔡", color: "pink", generate: generateCaseMatch },
+  { id: "sight-words", subject: "reading", title: "Sight Words", emoji: "👀", color: "indigo", generate: generateSightWords },
   { id: "letter-hunt", subject: "reading", title: "Letter Hunt", emoji: "🔍", color: "rose", generate: generateHunt },
   { id: "story-time", subject: "reading", title: "Story Time", emoji: "📚", color: "rose", generate: generateStoryTime },
   { id: "build-a-word", subject: "writing", title: "Build a Word", emoji: "✏️", color: "violet", generate: generateSpell },

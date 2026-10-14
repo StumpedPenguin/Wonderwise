@@ -6,6 +6,7 @@ import { gradientFor, accentFor } from "@/lib/theme";
 import { GAMES } from "@/lib/games";
 import { SPECIAL_REWARD, lessonDone } from "@/lib/lessons";
 import { TokenBadge } from "@/components/TokenBadge";
+import { GoalBar } from "@/components/GoalBar";
 
 export const dynamic = "force-dynamic";
 
@@ -46,6 +47,9 @@ export default async function Dashboard({
 
   const dailyDone = lessonDone(db.ledger, child.id, "daily");
   const weeklyDone = lessonDone(db.ledger, child.id, "weekly");
+  const goalPrize = child.goalPrizeId
+    ? db.prizes.find((p) => p.id === child.goalPrizeId && p.active)
+    : undefined;
 
   return (
     <main className="mx-auto flex min-h-full w-full max-w-2xl flex-col px-5 py-8">
@@ -72,6 +76,20 @@ export default async function Dashboard({
           <TokenBadge amount={balance} size="lg" />
         </div>
       </section>
+
+      {/* Savings goal */}
+      {goalPrize ? (
+        <div className="mt-4">
+          <GoalBar emoji={goalPrize.emoji} name={goalPrize.name} cost={goalPrize.cost} balance={balance} />
+        </div>
+      ) : (
+        <Link
+          href={`/play/${child.id}/prizes`}
+          className="btn-bounce mt-4 flex items-center justify-center gap-2 rounded-4xl bg-white/70 px-4 py-3 font-display font-bold text-slate-500 shadow-sm hover:bg-white"
+        >
+          ⭐ Pick a prize to save for!
+        </Link>
+      )}
 
       {/* Daily & Weekly challenges */}
       <section className="mt-6 grid grid-cols-2 gap-4">

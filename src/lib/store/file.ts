@@ -62,7 +62,14 @@ function isToday(iso: string): boolean {
 function scopedSnapshot(db: FileDB, familyId: string): DB {
   const f = (x: { familyId: string }) => x.familyId === familyId;
   return {
-    children: db.children.filter(f).map((c) => ({ ...c, hiddenGames: c.hiddenGames ?? [] })),
+    children: db.children
+      .filter(f)
+      .map((c) => ({
+        ...c,
+        hiddenGames: c.hiddenGames ?? [],
+        goalPrizeId: c.goalPrizeId ?? null,
+        skillLevels: c.skillLevels ?? {},
+      })),
     ledger: db.ledger.filter(f),
     prizes: db.prizes.filter(f),
     redemptions: db.redemptions.filter(f),
@@ -76,7 +83,9 @@ function makeTx(db: FileDB, familyId: string): Tx {
   return {
     async getChild(id) {
       const c = db.children.find((x) => x.id === id && inFamily(x));
-      return c ? { ...c, hiddenGames: c.hiddenGames ?? [] } : null;
+      return c
+        ? { ...c, hiddenGames: c.hiddenGames ?? [], goalPrizeId: c.goalPrizeId ?? null, skillLevels: c.skillLevels ?? {} }
+        : null;
     },
     async setChildMaxSum(id, maxSum) {
       const child = db.children.find((c) => c.id === id && inFamily(c));

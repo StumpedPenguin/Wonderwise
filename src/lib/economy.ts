@@ -36,3 +36,18 @@ export function computeAward({ correct, total, difficulty }: AwardInput): AwardR
   const tokens = passed ? PER_LESSON[difficulty] : 0;
   return { tokens, accuracy, passed };
 }
+
+// --- Adaptive difficulty ----------------------------------------------------
+
+export const LEVELS: Difficulty[] = ["easy", "medium", "hard"];
+
+/**
+ * The recommended next level after a lesson: nail it (≥90%) and move up, really
+ * struggle (<60%) and move down, otherwise stay. Used by the "Auto" level.
+ */
+export function nextLevel(played: Difficulty, accuracy: number): Difficulty {
+  const i = LEVELS.indexOf(played);
+  if (accuracy >= 0.9 && i < LEVELS.length - 1) return LEVELS[i + 1];
+  if (accuracy < 0.6 && i > 0) return LEVELS[i - 1];
+  return played;
+}

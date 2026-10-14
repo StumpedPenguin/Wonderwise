@@ -31,6 +31,11 @@ export const children = pgTable("children", {
   color: text("color").notNull(),
   mathMaxSum: integer("math_max_sum").notNull().default(5),
   hiddenGames: jsonb("hidden_games").$type<string[]>().notNull().default([]),
+  goalPrizeId: text("goal_prize_id"),
+  skillLevels: jsonb("skill_levels")
+    .$type<Record<string, "easy" | "medium" | "hard">>()
+    .notNull()
+    .default({}),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
