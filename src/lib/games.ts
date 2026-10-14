@@ -378,6 +378,245 @@ function generateStoryTime(difficulty: Difficulty): Question[] {
   }));
 }
 
+// --- What Comes Next? (number sequence) -------------------------------------
+
+const SEQ_MAX: Record<Difficulty, number> = { easy: 10, medium: 20, hard: 30 };
+
+function generateNumberLine(difficulty: Difficulty): Question[] {
+  const max = SEQ_MAX[difficulty];
+  const out: Question[] = [];
+  let prev = "";
+  for (let i = 0; i < DEFAULT_QUESTIONS; i++) {
+    let start = randInt(1, max - 2); // run of three: start, start+1, start+2
+    const blank = randInt(0, 2); // which position is missing
+    const run = [start, start + 1, start + 2];
+    const answer = run[blank];
+    const key = `${start}-${blank}`;
+    if (key === prev) {
+      start = randInt(1, max - 2);
+    }
+    prev = `${start}-${blank}`;
+    const shown = run.map((n, idx) => (idx === blank ? "＿" : String(n))).join("   ");
+    out.push({
+      id: crypto.randomUUID(),
+      kind: "choice",
+      difficulty,
+      spoken: "What number is missing?",
+      promptText: shown,
+      answer: String(answer),
+      choices: numberChoices(answer, max),
+    });
+  }
+  return out;
+}
+
+// --- More or Less (compare numbers) -----------------------------------------
+
+const COMPARE_MAX: Record<Difficulty, number> = { easy: 10, medium: 20, hard: 50 };
+
+function generateCompare(difficulty: Difficulty): Question[] {
+  const max = COMPARE_MAX[difficulty];
+  const out: Question[] = [];
+  for (let i = 0; i < DEFAULT_QUESTIONS; i++) {
+    let a = randInt(1, max);
+    let b = randInt(1, max);
+    while (b === a) b = randInt(1, max);
+    const wantBigger = Math.random() < 0.5;
+    const answer = wantBigger ? Math.max(a, b) : Math.min(a, b);
+    out.push({
+      id: crypto.randomUUID(),
+      kind: "choice",
+      difficulty,
+      spoken: wantBigger ? "Tap the bigger number." : "Tap the smaller number.",
+      promptText: wantBigger ? "Which is more? ⬆️" : "Which is less? ⬇️",
+      answer: String(answer),
+      choices: shuffle([String(a), String(b)]),
+    });
+  }
+  return out;
+}
+
+// --- Big & Little Letters (uppercase / lowercase match) ---------------------
+
+const CASE_RANGE: Record<Difficulty, number> = { easy: 10, medium: 20, hard: 26 };
+
+function generateCaseMatch(difficulty: Difficulty): Question[] {
+  const span = CASE_RANGE[difficulty];
+  const out: Question[] = [];
+  let prev = "";
+  for (let i = 0; i < DEFAULT_QUESTIONS; i++) {
+    let idx = randInt(0, span - 1);
+    while (LETTERS[idx] === prev) idx = randInt(0, span - 1);
+    prev = LETTERS[idx];
+    const showUpper = Math.random() < 0.5;
+    const shown = showUpper ? LETTERS[idx] : LETTERS[idx].toLowerCase();
+    const answer = showUpper ? LETTERS[idx].toLowerCase() : LETTERS[idx];
+    const set = new Set<string>([answer]);
+    while (set.size < 4) {
+      const d = LETTERS[randInt(0, span - 1)];
+      set.add(showUpper ? d.toLowerCase() : d);
+    }
+    out.push({
+      id: crypto.randomUUID(),
+      kind: "choice",
+      difficulty,
+      spoken: `Find the ${showUpper ? "little" : "big"} letter that matches ${LETTERS[idx]}.`,
+      promptText: shown,
+      answer,
+      choices: shuffle([...set]),
+    });
+  }
+  return out;
+}
+
+// --- Shapes & Colors --------------------------------------------------------
+
+const SHAPES = [
+  { name: "circle", e: "⚪" },
+  { name: "square", e: "🟦" },
+  { name: "triangle", e: "🔺" },
+  { name: "star", e: "⭐" },
+  { name: "heart", e: "❤️" },
+  { name: "diamond", e: "🔶" },
+];
+const COLORS_SET = [
+  { name: "red", e: "🔴" },
+  { name: "blue", e: "🔵" },
+  { name: "green", e: "🟢" },
+  { name: "yellow", e: "🟡" },
+  { name: "purple", e: "🟣" },
+  { name: "orange", e: "🟠" },
+];
+
+function generateShapesColors(difficulty: Difficulty): Question[] {
+  const nChoices = difficulty === "easy" ? 3 : 4;
+  const out: Question[] = [];
+  for (let i = 0; i < DEFAULT_QUESTIONS; i++) {
+    const useShape = Math.random() < 0.5;
+    const pool = useShape ? SHAPES : COLORS_SET;
+    const target = pool[randInt(0, pool.length - 1)];
+    const distractors = shuffle(pool.filter((p) => p.name !== target.name))
+      .slice(0, nChoices - 1)
+      .map((p) => p.e);
+    out.push({
+      id: crypto.randomUUID(),
+      kind: "choice",
+      difficulty,
+      spoken: `Find the ${target.name}${useShape ? "" : " one"}.`,
+      promptText: "🔎",
+      answer: target.e,
+      choices: shuffle([target.e, ...distractors]),
+    });
+  }
+  return out;
+}
+
+// --- Put In Order (sequence letters/numbers) --------------------------------
+
+const ORDER_COUNT: Record<Difficulty, number> = { easy: 3, medium: 4, hard: 5 };
+
+function generateOrder(difficulty: Difficulty): Question[] {
+  const count = ORDER_COUNT[difficulty];
+  const out: Question[] = [];
+  for (let i = 0; i < DEFAULT_QUESTIONS; i++) {
+    const useNumbers = Math.random() < 0.5;
+    const picked = new Set<string>();
+    if (useNumbers) {
+      while (picked.size < count) picked.add(String(randInt(1, 9)));
+    } else {
+      while (picked.size < count) picked.add(LETTERS[randInt(0, 25)]);
+    }
+    const sorted = [...picked].sort();
+    out.push({
+      id: crypto.randomUUID(),
+      kind: "spell",
+      difficulty,
+      spoken: useNumbers
+        ? "Put the numbers in order, smallest first."
+        : "Put the letters in A B C order.",
+      promptText: useNumbers ? "🔢" : "🔤",
+      answer: sorted.join(""),
+      choices: shuffle([...picked]),
+    });
+  }
+  return out;
+}
+
+// --- Letter Hunt (tap every matching letter) --------------------------------
+
+const HUNT: Record<Difficulty, { cells: number; targets: number }> = {
+  easy: { cells: 6, targets: 2 },
+  medium: { cells: 9, targets: 3 },
+  hard: { cells: 12, targets: 4 },
+};
+
+function generateHunt(difficulty: Difficulty): Question[] {
+  const { cells, targets } = HUNT[difficulty];
+  const out: Question[] = [];
+  for (let i = 0; i < DEFAULT_QUESTIONS; i++) {
+    const target = LETTERS[randInt(0, 25)];
+    const grid: string[] = [];
+    for (let t = 0; t < targets; t++) grid.push(target);
+    while (grid.length < cells) {
+      const d = LETTERS[randInt(0, 25)];
+      if (d !== target) grid.push(d);
+    }
+    out.push({
+      id: crypto.randomUUID(),
+      kind: "hunt",
+      difficulty,
+      spoken: `Find all the letter ${target}! Tap each one.`,
+      promptText: target, // the letter to hunt for
+      answer: "found",
+      choices: shuffle(grid), // the grid cells
+    });
+  }
+  return out;
+}
+
+// --- Memory Match -----------------------------------------------------------
+
+const MEMORY_PAIRS: Record<Difficulty, number> = { easy: 3, medium: 4, hard: 5 };
+const MEMORY_BOARDS = 3;
+
+function dots(n: number): string {
+  return "●".repeat(n);
+}
+
+function generateMemory(difficulty: Difficulty): Question[] {
+  const nPairs = MEMORY_PAIRS[difficulty];
+  const out: Question[] = [];
+  for (let board = 0; board < MEMORY_BOARDS; board++) {
+    // Mix letter (upper/lower) and number (numeral/dots) pairs.
+    const pairs: [string, string][] = [];
+    const usedL = new Set<string>();
+    const usedN = new Set<number>();
+    for (let p = 0; p < nPairs; p++) {
+      if (Math.random() < 0.5) {
+        let L = LETTERS[randInt(0, 25)];
+        while (usedL.has(L)) L = LETTERS[randInt(0, 25)];
+        usedL.add(L);
+        pairs.push([L, L.toLowerCase()]);
+      } else {
+        let n = randInt(1, 6);
+        while (usedN.has(n)) n = randInt(1, 6);
+        usedN.add(n);
+        pairs.push([String(n), dots(n)]);
+      }
+    }
+    out.push({
+      id: crypto.randomUUID(),
+      kind: "match",
+      difficulty,
+      spoken: "Find the matching pairs!",
+      promptText: JSON.stringify(pairs), // parsed by the UI
+      answer: "matched",
+      choices: [],
+    });
+  }
+  return out;
+}
+
 // --- Daily / Weekly mixed lessons -------------------------------------------
 
 // Regular games the mixed lessons draw from (not the specials or AI content).
@@ -386,12 +625,19 @@ const MIX_GAME_IDS = [
   "count-tap",
   "domino-add",
   "find-it",
+  "number-line",
+  "more-less",
+  "order-it",
+  "shapes-colors",
   "story-problems",
   "read-the-word",
   "digraphs",
+  "big-little",
+  "letter-hunt",
   "build-a-word",
   "story-time",
   "tracing",
+  // memory-match is a multi-board board game, too long for a quick mixed quiz.
 ];
 
 // Run `fn` with Math.random replaced by a seeded generator, so the content is
@@ -463,9 +709,16 @@ export const GAMES: GameDef[] = [
   { id: "count-tap", subject: "math", title: "Count & Tap", emoji: "🔢", color: "teal", generate: generateCount },
   { id: "domino-add", subject: "math", title: "Domino Math", emoji: "🎲", color: "blue", generate: generateDomino },
   { id: "find-it", subject: "math", title: "Listen & Find", emoji: "👂", color: "cyan", generate: generateFind },
+  { id: "number-line", subject: "math", title: "What Comes Next?", emoji: "🔟", color: "lime", generate: generateNumberLine },
+  { id: "more-less", subject: "math", title: "More or Less", emoji: "⚖️", color: "orange", generate: generateCompare },
+  { id: "order-it", subject: "math", title: "Put In Order", emoji: "🔢", color: "teal", generate: generateOrder },
+  { id: "shapes-colors", subject: "math", title: "Shapes & Colors", emoji: "🔷", color: "purple", generate: generateShapesColors },
+  { id: "memory-match", subject: "math", title: "Memory Match", emoji: "🃏", color: "cyan", generate: generateMemory },
   { id: "story-problems", subject: "math", title: "Story Problems", emoji: "🧮", color: "amber", generate: generateStoryProblems },
   { id: "read-the-word", subject: "reading", title: "Read the Word", emoji: "📖", color: "indigo", generate: generateReadWord },
   { id: "digraphs", subject: "reading", title: "Digraph Sounds", emoji: "🔤", color: "fuchsia", generate: generateDigraphs },
+  { id: "big-little", subject: "reading", title: "Big & Little", emoji: "🔡", color: "pink", generate: generateCaseMatch },
+  { id: "letter-hunt", subject: "reading", title: "Letter Hunt", emoji: "🔍", color: "rose", generate: generateHunt },
   { id: "story-time", subject: "reading", title: "Story Time", emoji: "📚", color: "rose", generate: generateStoryTime },
   { id: "build-a-word", subject: "writing", title: "Build a Word", emoji: "✏️", color: "violet", generate: generateSpell },
   { id: "tracing", subject: "writing", title: "Tracing", emoji: "✍️", color: "emerald", generate: generateTrace },

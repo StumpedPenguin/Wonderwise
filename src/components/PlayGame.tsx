@@ -185,6 +185,10 @@ export function PlayGame({
         <ReadingQuestion key={current.id} question={current} accent={accent} onComplete={onComplete} />
       ) : current.kind === "domino" ? (
         <DominoQuestion key={current.id} question={current} accent={accent} onComplete={onComplete} />
+      ) : current.kind === "hunt" ? (
+        <HuntQuestion key={current.id} question={current} accent={accent} onComplete={onComplete} />
+      ) : current.kind === "match" ? (
+        <MatchQuestion key={current.id} question={current} accent={accent} onComplete={onComplete} />
       ) : (
         <ChoiceQuestion key={current.id} question={current} accent={accent} onComplete={onComplete} />
       )}
@@ -501,6 +505,214 @@ function ReadingQuestion({
         })}
       </section>
     </>
+  );
+}
+
+// --- Letter Hunt (tap every matching cell) ----------------------------------
+
+function HuntQuestion({
+  question,
+  accent,
+  onComplete,
+}: {
+  question: Question;
+  accent: ReturnType<typeof accentFor>;
+  onComplete: (value: string) => void;
+}) {
+  const [picked, setPicked] = useState<Set<number>>(new Set());
+  const [checked, setChecked] = useState<boolean | null>(null);
+  const locked = useRef(false);
+  const target = question.promptText;
+
+  useEffect(() => {
+    speak(question.spoken);
+  }, [question.spoken]);
+
+  function toggle(i: number) {
+    if (locked.current) return;
+    setPicked((p) => {
+      const n = new Set(p);
+      if (n.has(i)) n.delete(i);
+      else n.add(i);
+      return n;
+    });
+  }
+
+  function done() {
+    if (locked.current) return;
+    locked.current = true;
+    // Correct = picked exactly the cells that match the target.
+    const want = new Set<number>();
+    question.choices.forEach((c, i) => {
+      if (c === target) want.add(i);
+    });
+    const ok =
+      picked.size === want.size && [...picked].every((i) => want.has(i));
+    setChecked(ok);
+    window.setTimeout(() => onComplete(ok ? "found" : "miss"), 1200);
+  }
+
+  const cols = question.choices.length <= 6 ? "grid-cols-3" : "grid-cols-4";
+
+  return (
+    <>
+      <section className="mt-6 flex flex-col items-center rounded-4xl bg-white px-6 py-6 shadow-lg">
+        <button
+          type="button"
+          onClick={() => speak(question.spoken)}
+          className={`btn-bounce mb-2 inline-flex items-center gap-2 rounded-full ${accent.soft} px-4 py-2 font-display ${accent.text}`}
+        >
+          🔊 Say it again
+        </button>
+        <p className="font-display text-xl text-slate-500">Find every</p>
+        <div className={`mt-1 font-display text-6xl font-bold ${accent.text}`}>{target}</div>
+
+        <div className={`mt-5 grid w-full ${cols} gap-2`}>
+          {question.choices.map((cell, i) => {
+            const on = picked.has(i);
+            const isTarget = cell === target;
+            let tone = on
+              ? `${accent.solid} text-white`
+              : "bg-slate-50 text-slate-700 ring-2 ring-slate-100";
+            if (checked !== null && isTarget) tone = "bg-emerald-400 text-white";
+            else if (checked !== null && on && !isTarget) tone = "bg-rose-300 text-white";
+            return (
+              <button
+                key={i}
+                type="button"
+                disabled={checked !== null}
+                onClick={() => toggle(i)}
+                className={`btn-bounce grid aspect-square place-items-center rounded-2xl font-display text-3xl font-bold uppercase shadow-sm ${tone}`}
+              >
+                {cell}
+              </button>
+            );
+          })}
+        </div>
+
+        {checked === true && (
+          <p className="mt-3 animate-pop font-display text-xl text-emerald-600">You found them all! ⭐</p>
+        )}
+        {checked === false && (
+          <p className="mt-3 font-display text-lg text-slate-500">
+            Good try! Tap every {target}.
+          </p>
+        )}
+      </section>
+
+      {checked === null && (
+        <section className="mt-6 flex justify-center">
+          <button
+            type="button"
+            onClick={done}
+            className={`btn-bounce rounded-full ${accent.solid} px-10 py-3 font-display text-lg font-bold text-white shadow-md`}
+          >
+            Done!
+          </button>
+        </section>
+      )}
+    </>
+  );
+}
+
+// --- Memory Match -----------------------------------------------------------
+
+interface MemCard {
+  pairId: number;
+  face: string;
+}
+
+function MatchQuestion({
+  question,
+  accent,
+  onComplete,
+}: {
+  question: Question;
+  accent: ReturnType<typeof accentFor>;
+  onComplete: (value: string) => void;
+}) {
+  const deck = useRef<MemCard[]>([]);
+  if (deck.current.length === 0) {
+    const pairs = JSON.parse(question.promptText) as [string, string][];
+    const cards: MemCard[] = [];
+    pairs.forEach(([a, b], i) => {
+      cards.push({ pairId: i, face: a }, { pairId: i, face: b });
+    });
+    for (let i = cards.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [cards[i], cards[j]] = [cards[j], cards[i]];
+    }
+    deck.current = cards;
+  }
+
+  const [flipped, setFlipped] = useState<number[]>([]);
+  const [matched, setMatched] = useState<Set<number>>(new Set());
+  const busy = useRef(false);
+  const done = useRef(false);
+
+  useEffect(() => {
+    speak(question.spoken);
+  }, [question.spoken]);
+
+  function tap(i: number) {
+    if (busy.current || flipped.includes(i) || matched.has(i)) return;
+    const next = [...flipped, i];
+    setFlipped(next);
+    if (next.length === 2) {
+      busy.current = true;
+      const [a, b] = next;
+      if (deck.current[a].pairId === deck.current[b].pairId) {
+        window.setTimeout(() => {
+          setMatched((m) => {
+            const n = new Set(m).add(a).add(b);
+            if (n.size === deck.current.length && !done.current) {
+              done.current = true;
+              window.setTimeout(() => onComplete("matched"), 700);
+            }
+            return n;
+          });
+          setFlipped([]);
+          busy.current = false;
+        }, 500);
+      } else {
+        window.setTimeout(() => {
+          setFlipped([]);
+          busy.current = false;
+        }, 900);
+      }
+    }
+  }
+
+  const cols = deck.current.length <= 6 ? "grid-cols-3" : deck.current.length <= 8 ? "grid-cols-4" : "grid-cols-5";
+
+  return (
+    <section className="mt-6 flex flex-col items-center rounded-4xl bg-white px-5 py-6 shadow-lg">
+      <p className="mb-4 font-display text-xl font-bold text-slate-600">Find the matching pairs!</p>
+      <div className={`grid w-full ${cols} gap-2`}>
+        {deck.current.map((card, i) => {
+          const show = flipped.includes(i) || matched.has(i);
+          return (
+            <button
+              key={i}
+              type="button"
+              onClick={() => tap(i)}
+              disabled={matched.has(i)}
+              className={`btn-bounce grid aspect-square place-items-center rounded-2xl font-display font-bold shadow-sm transition-colors ${
+                show
+                  ? matched.has(i)
+                    ? "bg-emerald-400 text-white"
+                    : `bg-white ${accent.text} ring-2 ${accent.ring}`
+                  : `${accent.solid} text-white`
+              }`}
+            >
+              <span className={card.face.length > 2 ? "text-xl leading-none" : "text-3xl"}>
+                {show ? card.face : "?"}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 
