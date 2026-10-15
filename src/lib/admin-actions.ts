@@ -30,6 +30,7 @@ export async function saveChild(input: {
   avatar: string;
   color: string;
   hiddenGames?: string[];
+  hiddenPrizes?: string[];
 }): Promise<AdminResult> {
   if (!(await requireParent())) return DENIED;
 
@@ -37,6 +38,7 @@ export async function saveChild(input: {
   const avatar = input.avatar.trim() || "🐣";
   const color = COLORS.includes(input.color) ? input.color : "sky";
   const hiddenGames = Array.isArray(input.hiddenGames) ? input.hiddenGames : undefined;
+  const hiddenPrizes = Array.isArray(input.hiddenPrizes) ? input.hiddenPrizes : undefined;
   if (!name) return { ok: false, message: "Please enter a name." };
 
   const familyId = await currentFamilyId();
@@ -50,6 +52,7 @@ export async function saveChild(input: {
         avatar,
         color,
         hiddenGames: hiddenGames ?? existing.hiddenGames ?? [],
+        hiddenPrizes: hiddenPrizes ?? existing.hiddenPrizes ?? [],
       });
     } else {
       const child: Child = {
@@ -60,6 +63,7 @@ export async function saveChild(input: {
         color,
         mathMaxSum: 5,
         hiddenGames: hiddenGames ?? [],
+        hiddenPrizes: hiddenPrizes ?? [],
         goalPrizeId: null,
         skillLevels: {},
         createdAt: new Date().toISOString(),

@@ -67,6 +67,7 @@ function scopedSnapshot(db: FileDB, familyId: string): DB {
       .map((c) => ({
         ...c,
         hiddenGames: c.hiddenGames ?? [],
+        hiddenPrizes: c.hiddenPrizes ?? [],
         goalPrizeId: c.goalPrizeId ?? null,
         skillLevels: c.skillLevels ?? {},
       })),
@@ -84,7 +85,13 @@ function makeTx(db: FileDB, familyId: string): Tx {
     async getChild(id) {
       const c = db.children.find((x) => x.id === id && inFamily(x));
       return c
-        ? { ...c, hiddenGames: c.hiddenGames ?? [], goalPrizeId: c.goalPrizeId ?? null, skillLevels: c.skillLevels ?? {} }
+        ? {
+            ...c,
+            hiddenGames: c.hiddenGames ?? [],
+            hiddenPrizes: c.hiddenPrizes ?? [],
+            goalPrizeId: c.goalPrizeId ?? null,
+            skillLevels: c.skillLevels ?? {},
+          }
         : null;
     },
     async setChildMaxSum(id, maxSum) {

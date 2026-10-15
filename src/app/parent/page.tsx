@@ -134,11 +134,17 @@ export default async function ParentPage() {
               avatar: c.avatar,
               color: c.color,
               hiddenGames: c.hiddenGames ?? [],
+              hiddenPrizes: c.hiddenPrizes ?? [],
             }))}
             allGames={GAMES.filter((g) => !g.special).map((g) => ({
               id: g.id,
               title: g.title,
               emoji: g.emoji,
+            }))}
+            allPrizes={db.prizes.map((p) => ({
+              id: p.id,
+              name: p.name,
+              emoji: p.emoji,
             }))}
           />
         </div>

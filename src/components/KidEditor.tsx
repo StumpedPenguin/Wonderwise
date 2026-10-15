@@ -11,11 +11,18 @@ interface KidData {
   avatar: string;
   color: string;
   hiddenGames: string[];
+  hiddenPrizes: string[];
 }
 
 export interface GameInfo {
   id: string;
   title: string;
+  emoji: string;
+}
+
+export interface PrizeInfo {
+  id: string;
+  name: string;
   emoji: string;
 }
 
@@ -27,25 +34,43 @@ const COLORS = [
   { id: "indigo", label: "Indigo" },
 ];
 
-export function KidEditor({ kids, allGames }: { kids: KidData[]; allGames: GameInfo[] }) {
+export function KidEditor({
+  kids,
+  allGames,
+  allPrizes,
+}: {
+  kids: KidData[];
+  allGames: GameInfo[];
+  allPrizes: PrizeInfo[];
+}) {
   return (
     <div className="flex flex-col gap-3">
       {kids.map((kid) => (
-        <KidRow key={kid.id} kid={kid} allGames={allGames} />
+        <KidRow key={kid.id} kid={kid} allGames={allGames} allPrizes={allPrizes} />
       ))}
-      <KidRow allGames={allGames} />
+      <KidRow allGames={allGames} allPrizes={allPrizes} />
     </div>
   );
 }
 
-function KidRow({ kid, allGames }: { kid?: KidData; allGames: GameInfo[] }) {
+function KidRow({
+  kid,
+  allGames,
+  allPrizes,
+}: {
+  kid?: KidData;
+  allGames: GameInfo[];
+  allPrizes: PrizeInfo[];
+}) {
   const router = useRouter();
   const isNew = !kid;
   const [name, setName] = useState(kid?.name ?? "");
   const [avatar, setAvatar] = useState(kid?.avatar ?? "🐣");
   const [color, setColor] = useState(kid?.color ?? "sky");
   const [hidden, setHidden] = useState<string[]>(kid?.hiddenGames ?? []);
+  const [hiddenPrizes, setHiddenPrizes] = useState<string[]>(kid?.hiddenPrizes ?? []);
   const [showGames, setShowGames] = useState(false);
+  const [showPrizes, setShowPrizes] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [saving, start] = useTransition();
 
@@ -53,11 +78,15 @@ function KidRow({ kid, allGames }: { kid?: KidData; allGames: GameInfo[] }) {
   function toggleGame(id: string) {
     setHidden((h) => (h.includes(id) ? h.filter((x) => x !== id) : [...h, id]));
   }
+  const isPrizeHidden = (id: string) => hiddenPrizes.includes(id);
+  function togglePrize(id: string) {
+    setHiddenPrizes((h) => (h.includes(id) ? h.filter((x) => x !== id) : [...h, id]));
+  }
 
   function save() {
     setMsg(null);
     start(async () => {
-      const res = await saveChild({ id: kid?.id, name, avatar, color, hiddenGames: hidden });
+      const res = await saveChild({ id: kid?.id, name, avatar, color, hiddenGames: hidden, hiddenPrizes });
       setMsg(res.message);
       if (res.ok) {
         if (isNew) {
@@ -65,7 +94,9 @@ function KidRow({ kid, allGames }: { kid?: KidData; allGames: GameInfo[] }) {
           setAvatar("🐣");
           setColor("sky");
           setHidden([]);
+          setHiddenPrizes([]);
           setShowGames(false);
+          setShowPrizes(false);
         }
         router.refresh();
       }
@@ -144,6 +175,47 @@ function KidRow({ kid, allGames }: { kid?: KidData; allGames: GameInfo[] }) {
                   >
                     <span>{g.emoji}</span>
                     {g.title}
+                    <span>{off ? "🚫" : "✓"}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Per-kid prize visibility */}
+      {!isNew && allPrizes.length > 0 && (
+        <div className="mt-2">
+          <button
+            type="button"
+            onClick={() => setShowPrizes((s) => !s)}
+            className="font-display text-sm font-bold text-sky-500 hover:text-sky-600"
+          >
+            {showPrizes ? "▾ " : "▸ "}
+            Prizes{" "}
+            {hiddenPrizes.length > 0 && (
+              <span className="text-slate-400">({hiddenPrizes.length} hidden)</span>
+            )}
+          </button>
+          {showPrizes && (
+            <div className="mt-2 flex flex-wrap gap-2">
+              {allPrizes.map((p) => {
+                const off = isPrizeHidden(p.id);
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => togglePrize(p.id)}
+                    className={`btn-bounce inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 font-display text-sm shadow-sm ${
+                      off
+                        ? "bg-slate-100 text-slate-400 line-through ring-1 ring-slate-200"
+                        : "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
+                    }`}
+                    title={off ? "Hidden — tap to show" : "Shown — tap to hide"}
+                  >
+                    <span>{p.emoji}</span>
+                    {p.name}
                     <span>{off ? "🚫" : "✓"}</span>
                   </button>
                 );

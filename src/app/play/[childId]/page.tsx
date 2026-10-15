@@ -48,7 +48,9 @@ export default async function Dashboard({
   const dailyDone = lessonDone(db.ledger, child.id, "daily");
   const weeklyDone = lessonDone(db.ledger, child.id, "weekly");
   const goalPrize = child.goalPrizeId
-    ? db.prizes.find((p) => p.id === child.goalPrizeId && p.active)
+    ? db.prizes.find(
+        (p) => p.id === child.goalPrizeId && p.active && !(child.hiddenPrizes ?? []).includes(p.id),
+      )
     : undefined;
 
   return (

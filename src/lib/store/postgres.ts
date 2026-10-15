@@ -64,6 +64,7 @@ function toChild(r: typeof schema.children.$inferSelect): Child {
     color: r.color,
     mathMaxSum: r.mathMaxSum,
     hiddenGames: (r.hiddenGames as string[] | null) ?? [],
+    hiddenPrizes: (r.hiddenPrizes as string[] | null) ?? [],
     goalPrizeId: r.goalPrizeId ?? null,
     skillLevels: (r.skillLevels as Record<string, Difficulty> | null) ?? {},
     createdAt: iso(r.createdAt)!,
@@ -270,6 +271,7 @@ function makeTx(tx: Transaction, familyId: string): Tx {
           color: child.color,
           mathMaxSum: child.mathMaxSum,
           hiddenGames: child.hiddenGames ?? [],
+          hiddenPrizes: child.hiddenPrizes ?? [],
           goalPrizeId: child.goalPrizeId ?? null,
           skillLevels: child.skillLevels ?? {},
         })
@@ -281,6 +283,7 @@ function makeTx(tx: Transaction, familyId: string): Tx {
             color: child.color,
             mathMaxSum: child.mathMaxSum,
             hiddenGames: child.hiddenGames ?? [],
+            hiddenPrizes: child.hiddenPrizes ?? [],
             goalPrizeId: child.goalPrizeId ?? null,
             skillLevels: child.skillLevels ?? {},
           },

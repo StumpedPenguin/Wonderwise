@@ -25,9 +25,10 @@ export default async function PrizesPage({
       .filter((r) => r.childId === child.id && r.status === "pending")
       .map((r) => r.prizeId),
   );
-  const prizes = db.prizes.filter((p) => p.active);
+  const hiddenPrizes = new Set(child.hiddenPrizes ?? []);
+  const prizes = db.prizes.filter((p) => p.active && !hiddenPrizes.has(p.id));
   const goalPrize = child.goalPrizeId
-    ? db.prizes.find((p) => p.id === child.goalPrizeId && p.active)
+    ? db.prizes.find((p) => p.id === child.goalPrizeId && p.active && !hiddenPrizes.has(p.id))
     : undefined;
 
   // Prizes the child has won (approved) or already used (claimed).
