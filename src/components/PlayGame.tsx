@@ -829,10 +829,11 @@ function MatchQuestion({
           busy.current = false;
         }, 500);
       } else {
+        // Keep a mismatch face-up longer so young kids can register both tiles.
         window.setTimeout(() => {
           setFlipped([]);
           busy.current = false;
-        }, 900);
+        }, 1500);
       }
     }
   }
