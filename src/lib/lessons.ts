@@ -23,28 +23,79 @@ export const SPECIAL_LABEL: Record<LessonKind, string> = {
   weekly: "Weekly Lesson",
 };
 
-// --- Date helpers (UTC, so a day/week boundary is the same everywhere) ------
+// --- Date helpers -----------------------------------------------------------
+// Day/week boundaries are anchored to a local timezone (default US Eastern, so
+// the daily resets at local midnight and the weekly at midnight Sun→Mon).
+// Override with the APP_TIMEZONE env var (an IANA zone like "America/Chicago").
+// All computed server-side with Intl, so it's correct regardless of DST or the
+// server's own timezone.
 
-export function startOfTodayUTC(d = new Date()): Date {
-  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+const APP_TZ = process.env.APP_TIMEZONE || "America/New_York";
+const DAY_MS = 86_400_000;
+
+/** How far local wall-clock in APP_TZ is ahead of UTC at `date`, in ms. */
+function tzOffsetMs(date: Date): number {
+  const p: Record<string, string> = {};
+  const dtf = new Intl.DateTimeFormat("en-US", {
+    timeZone: APP_TZ,
+    hour12: false,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+  for (const part of dtf.formatToParts(date)) p[part.type] = part.value;
+  const asUTC = Date.UTC(
+    +p.year,
+    +p.month - 1,
+    +p.day,
+    +p.hour % 24,
+    +p.minute,
+    +p.second,
+  );
+  return asUTC - date.getTime();
 }
 
-/** Monday 00:00 UTC of the given date's week. */
-export function startOfWeekUTC(d = new Date()): Date {
-  const x = startOfTodayUTC(d);
-  const dow = x.getUTCDay(); // 0 = Sun … 6 = Sat
+/** The local calendar date (in APP_TZ) of an instant, as "YYYY-MM-DD". */
+function localYMD(date: Date): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: APP_TZ,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+}
+
+/** The UTC instant of local midnight (in APP_TZ) on the given date's day. */
+export function startOfToday(d = new Date()): Date {
+  const [y, m, day] = localYMD(d).split("-").map(Number);
+  const guess = Date.UTC(y, m - 1, day); // local wall-clock midnight as if UTC
+  return new Date(guess - tzOffsetMs(new Date(guess)));
+}
+
+/** Local day of week in APP_TZ: 0 = Sun … 6 = Sat. */
+function localDayOfWeek(d: Date): number {
+  const name = new Intl.DateTimeFormat("en-US", { timeZone: APP_TZ, weekday: "short" }).format(d);
+  return ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(name);
+}
+
+/** The UTC instant of local midnight on this week's Monday (week starts Mon). */
+export function startOfWeek(d = new Date()): Date {
+  const dow = localDayOfWeek(d);
   const sinceMonday = dow === 0 ? 6 : dow - 1;
-  x.setUTCDate(x.getUTCDate() - sinceMonday);
-  return x;
+  const mondayish = new Date(startOfToday(d).getTime() - sinceMonday * DAY_MS);
+  return startOfToday(mondayish); // re-anchor to local midnight (handles DST)
 }
 
 /** A stable key for the current period — changes each day / each week. */
 export function periodKey(kind: LessonKind, d = new Date()): string {
-  return (kind === "daily" ? startOfTodayUTC(d) : startOfWeekUTC(d)).toISOString().slice(0, 10);
+  return localYMD(kind === "daily" ? startOfToday(d) : startOfWeek(d));
 }
 
 export function periodStart(kind: LessonKind): Date {
-  return kind === "daily" ? startOfTodayUTC() : startOfWeekUTC();
+  return kind === "daily" ? startOfToday() : startOfWeek();
 }
 
 /** Deterministic 32-bit seed from a string (FNV-1a). */
