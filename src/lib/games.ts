@@ -3,6 +3,7 @@ import { WORD_PROBLEMS } from "./wordProblems";
 import { READING_PROMPTS } from "./readingPrompts";
 import { DIGRAPH_WORDS, DIGRAPH_CHOICES } from "./digraphs";
 import { SIGHT_WORDS } from "./sightWords";
+import { DIZZY_MAX, DIZZY_PUZZLES, type DizzyEquation, type DizzyPuzzle } from "./dizzy";
 import { SPECIAL_COUNT, periodKey, hashString, type LessonKind } from "./lessons";
 
 // Standard lessons are 10 questions. Some games override this (story problems
@@ -610,6 +611,64 @@ function generateSightWords(difficulty: Difficulty): Question[] {
   return out;
 }
 
+// --- Dizzy Digits (use each digit 0..N once to fill the blanks) -------------
+
+function makeDizzyPuzzle(maxDigit: number): DizzyPuzzle {
+  const pool = shuffle(Array.from({ length: maxDigit + 1 }, (_, i) => i));
+  const equations: DizzyEquation[] = [];
+  let i = 0;
+  while (i < pool.length) {
+    const remaining = pool.length - i;
+    const twoBlank = remaining >= 2 && Math.random() < 0.5;
+    if (twoBlank) {
+      // blank + blank = (sum shown)
+      const a = pool[i];
+      const b = pool[i + 1];
+      i += 2;
+      equations.push({
+        a: { v: a, blank: true },
+        b: { v: b, blank: true },
+        c: { v: a + b, blank: false },
+      });
+    } else {
+      const x = pool[i];
+      i += 1;
+      const pattern = randInt(0, 2);
+      if (pattern === 0) {
+        // fixed + blank = fixed
+        const f = randInt(0, 4);
+        equations.push({ a: { v: f, blank: false }, b: { v: x, blank: true }, c: { v: f + x, blank: false } });
+      } else if (pattern === 1) {
+        // blank + fixed = fixed
+        const f = randInt(0, 4);
+        equations.push({ a: { v: x, blank: true }, b: { v: f, blank: false }, c: { v: x + f, blank: false } });
+      } else {
+        // fixed + fixed = blank (the result is the blank)
+        const a = randInt(0, x);
+        equations.push({ a: { v: a, blank: false }, b: { v: x - a, blank: false }, c: { v: x, blank: true } });
+      }
+    }
+  }
+  return { maxDigit, equations: shuffle(equations) };
+}
+
+function generateDizzy(difficulty: Difficulty): Question[] {
+  const maxDigit = DIZZY_MAX[difficulty];
+  const out: Question[] = [];
+  for (let p = 0; p < DIZZY_PUZZLES[difficulty]; p++) {
+    out.push({
+      id: crypto.randomUUID(),
+      kind: "dizzy",
+      difficulty,
+      spoken: `Use each number from 0 to ${maxDigit} one time to fill the boxes.`,
+      promptText: JSON.stringify(makeDizzyPuzzle(maxDigit)), // parsed by the UI
+      answer: "solved",
+      choices: [],
+    });
+  }
+  return out;
+}
+
 // --- Memory Match -----------------------------------------------------------
 
 const MEMORY_PAIRS: Record<Difficulty, number> = { easy: 3, medium: 4, hard: 5 };
@@ -738,6 +797,7 @@ export const GAMES: GameDef[] = [
   { id: "number-line", subject: "math", title: "What Comes Next?", emoji: "🔟", color: "lime", generate: generateNumberLine },
   { id: "more-less", subject: "math", title: "More or Less", emoji: "⚖️", color: "orange", generate: generateCompare },
   { id: "order-it", subject: "math", title: "Put In Order", emoji: "🔢", color: "teal", generate: generateOrder },
+  { id: "dizzy-digits", subject: "math", title: "Dizzy Digits", emoji: "🌀", color: "indigo", generate: generateDizzy },
   { id: "shapes", subject: "math", title: "Shapes", emoji: "🔷", color: "purple", generate: generateShapes },
   { id: "memory-match", subject: "math", title: "Memory Match", emoji: "🃏", color: "cyan", generate: generateMemory },
   { id: "story-problems", subject: "math", title: "Story Problems", emoji: "🧮", color: "amber", generate: generateStoryProblems },

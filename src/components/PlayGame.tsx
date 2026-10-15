@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { finishSession, startGame, type FinishResult } from "@/lib/actions";
 import type { Difficulty, Question } from "@/lib/types";
@@ -212,6 +212,8 @@ export function PlayGame({
         <MatchQuestion key={current.id} question={current} accent={accent} onComplete={onComplete} />
       ) : current.kind === "shape" ? (
         <ShapeQuestion key={current.id} question={current} accent={accent} onComplete={onComplete} />
+      ) : current.kind === "dizzy" ? (
+        <DizzyQuestion key={current.id} question={current} accent={accent} onComplete={onComplete} />
       ) : (
         <ChoiceQuestion key={current.id} question={current} accent={accent} onComplete={onComplete} />
       )}
@@ -528,6 +530,194 @@ function ReadingQuestion({
         })}
       </section>
     </>
+  );
+}
+
+// --- Dizzy Digits (fill the blanks with 0..N, each once) --------------------
+
+interface DCell { v: number; blank: boolean }
+interface DEq { a: DCell; b: DCell; c: DCell }
+interface DPuzzle { maxDigit: number; equations: DEq[] }
+
+function DizzyQuestion({
+  question,
+  accent,
+  onComplete,
+}: {
+  question: Question;
+  accent: ReturnType<typeof accentFor>;
+  onComplete: (value: string) => void;
+}) {
+  const puzzle = useMemo<DPuzzle>(() => JSON.parse(question.promptText), [question.promptText]);
+  const positions = ["a", "b", "c"] as const;
+  const blanks = useMemo(() => {
+    const list: { key: string; eq: number; pos: "a" | "b" | "c" }[] = [];
+    puzzle.equations.forEach((eq, i) => {
+      positions.forEach((pos) => {
+        if (eq[pos].blank) list.push({ key: `${i}-${pos}`, eq: i, pos });
+      });
+    });
+    return list;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [puzzle]);
+
+  const [placed, setPlaced] = useState<Record<string, number | null>>({});
+  const [selected, setSelected] = useState<string | null>(null);
+  const [checked, setChecked] = useState<null | boolean>(null);
+  const locked = useRef(false);
+
+  useEffect(() => {
+    speak(question.spoken);
+  }, [question.spoken]);
+
+  const usedDigits = new Set(Object.values(placed).filter((v): v is number => v != null));
+  const allFilled = blanks.every((b) => placed[b.key] != null);
+
+  function tapBlank(key: string) {
+    if (locked.current) return;
+    setChecked(null);
+    if (placed[key] != null) setPlaced((p) => ({ ...p, [key]: null }));
+    setSelected(key);
+  }
+  function tapDigit(d: number) {
+    if (locked.current || usedDigits.has(d)) return;
+    setChecked(null);
+    const target =
+      selected && placed[selected] == null
+        ? selected
+        : blanks.find((b) => placed[b.key] == null)?.key;
+    if (!target) return;
+    setPlaced((p) => ({ ...p, [target]: d }));
+    setSelected(null);
+  }
+  function clearAll() {
+    if (locked.current) return;
+    setPlaced({});
+    setSelected(null);
+    setChecked(null);
+  }
+
+  function cellValue(eq: DEq, pos: "a" | "b" | "c", i: number): number | null {
+    const cell = eq[pos];
+    if (!cell.blank) return cell.v;
+    const v = placed[`${i}-${pos}`];
+    return v == null ? null : v;
+  }
+  function eqCorrect(eq: DEq, i: number): boolean {
+    const a = cellValue(eq, "a", i);
+    const b = cellValue(eq, "b", i);
+    const c = cellValue(eq, "c", i);
+    return a != null && b != null && c != null && a + b === c;
+  }
+
+  function check() {
+    if (locked.current || !allFilled) return;
+    const ok = puzzle.equations.every((eq, i) => eqCorrect(eq, i));
+    setChecked(ok);
+    if (ok) {
+      locked.current = true;
+      window.setTimeout(() => onComplete("solved"), 1300);
+    } else {
+      window.setTimeout(() => setChecked(null), 1600);
+    }
+  }
+
+  function Cell({ eq, pos, i }: { eq: DEq; pos: "a" | "b" | "c"; i: number }) {
+    const cell = eq[pos];
+    const box = "grid h-12 w-12 place-items-center rounded-xl font-display text-2xl font-bold tabular-nums sm:h-14 sm:w-14";
+    if (!cell.blank) {
+      return <span className={`${box} text-slate-700`}>{cell.v}</span>;
+    }
+    const key = `${i}-${pos}`;
+    const val = placed[key];
+    const isSel = selected === key;
+    const wrong = checked === false && !eqCorrect(eq, i);
+    let tone = "border-2 border-dashed border-slate-300 text-slate-400";
+    if (val != null) tone = `bg-white ${accent.text} ring-2 ${accent.ring}`;
+    if (isSel) tone = `bg-white ${accent.text} ring-4 ${accent.ring}`;
+    if (wrong) tone = "bg-rose-50 text-rose-500 ring-2 ring-rose-300";
+    return (
+      <button type="button" onClick={() => tapBlank(key)} disabled={locked.current} className={`${box} ${tone}`}>
+        {val ?? ""}
+      </button>
+    );
+  }
+
+  return (
+    <div className="mt-6 flex flex-1 flex-col">
+      <section className="flex flex-col items-center rounded-4xl bg-white px-5 py-6 shadow-lg">
+        <button
+          type="button"
+          onClick={() => speak(question.spoken)}
+          className={`btn-bounce mb-1 inline-flex items-center gap-2 rounded-full ${accent.soft} px-4 py-2 font-display text-sm ${accent.text}`}
+        >
+          🔊 Say it again
+        </button>
+        <p className="mb-4 text-center font-display text-slate-500">
+          Use each number <span className="font-bold text-slate-700">0–{puzzle.maxDigit}</span> once!
+        </p>
+
+        <div className="flex flex-col gap-3">
+          {puzzle.equations.map((eq, i) => (
+            <div key={i} className="flex items-center justify-center gap-1.5">
+              <Cell eq={eq} pos="a" i={i} />
+              <span className="font-display text-2xl font-bold text-slate-400">+</span>
+              <Cell eq={eq} pos="b" i={i} />
+              <span className="font-display text-2xl font-bold text-slate-400">=</span>
+              <Cell eq={eq} pos="c" i={i} />
+            </div>
+          ))}
+        </div>
+
+        {checked === true && (
+          <p className="mt-4 animate-pop font-display text-2xl text-emerald-600">You did it! 🌟</p>
+        )}
+        {checked === false && (
+          <p className="mt-4 font-display text-lg text-slate-500">Not quite — fix the red ones!</p>
+        )}
+      </section>
+
+      {/* Digit tray */}
+      <section className="mt-5 flex flex-wrap justify-center gap-2">
+        {Array.from({ length: puzzle.maxDigit + 1 }, (_, d) => d).map((d) => {
+          const used = usedDigits.has(d);
+          return (
+            <button
+              key={d}
+              type="button"
+              disabled={used || locked.current}
+              onClick={() => tapDigit(d)}
+              className={`btn-bounce grid h-14 w-14 place-items-center rounded-2xl font-display text-3xl font-bold tabular-nums shadow-md ${
+                used ? "bg-slate-100 text-slate-300" : `bg-white ${accent.text} ring-2 ${accent.ring}`
+              }`}
+            >
+              {d}
+            </button>
+          );
+        })}
+      </section>
+
+      <section className="mt-5 flex justify-center gap-3">
+        <button
+          type="button"
+          onClick={clearAll}
+          disabled={locked.current}
+          className="btn-bounce rounded-full bg-white px-6 py-3 font-display text-lg font-bold text-slate-500 shadow-md ring-2 ring-slate-100"
+        >
+          ↺ Clear
+        </button>
+        <button
+          type="button"
+          onClick={check}
+          disabled={!allFilled || locked.current}
+          className={`btn-bounce rounded-full px-8 py-3 font-display text-lg font-bold text-white shadow-md ${
+            allFilled ? accent.solid : "bg-slate-300"
+          }`}
+        >
+          Check!
+        </button>
+      </section>
+    </div>
   );
 }
 
