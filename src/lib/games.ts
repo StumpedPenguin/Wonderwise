@@ -250,6 +250,10 @@ const WORDS = [
   { w: "bat", e: "🦇" }, { w: "car", e: "🚗" }, { w: "cap", e: "🧢" },
   { w: "egg", e: "🥚" }, { w: "web", e: "🕸️" }, { w: "saw", e: "🪚" },
   { w: "axe", e: "🪓" }, { w: "pie", e: "🥧" }, { w: "ear", e: "👂" },
+  { w: "ram", e: "🐏" }, { w: "rat", e: "🐀" }, { w: "bug", e: "🐛" },
+  { w: "fly", e: "🪰" }, { w: "ice", e: "🧊" }, { w: "nut", e: "🥜" },
+  { w: "log", e: "🪵" }, { w: "paw", e: "🐾" }, { w: "ski", e: "🎿" },
+  { w: "tea", e: "🍵" }, { w: "ham", e: "🍖" }, { w: "eye", e: "👁️" },
   // 4-letter
   { w: "fish", e: "🐟" }, { w: "frog", e: "🐸" }, { w: "star", e: "⭐" },
   { w: "moon", e: "🌙" }, { w: "cake", e: "🍰" }, { w: "ball", e: "⚽" },
@@ -261,6 +265,12 @@ const WORDS = [
   { w: "book", e: "📖" }, { w: "hand", e: "✋" }, { w: "snow", e: "❄️" },
   { w: "king", e: "🤴" }, { w: "crab", e: "🦀" }, { w: "goat", e: "🐐" },
   { w: "kite", e: "🪁" }, { w: "gift", e: "🎁" }, { w: "rose", e: "🌹" },
+  { w: "wolf", e: "🐺" }, { w: "deer", e: "🦌" }, { w: "swan", e: "🦢" },
+  { w: "lamb", e: "🐑" }, { w: "seal", e: "🦭" }, { w: "worm", e: "🪱" },
+  { w: "dove", e: "🕊️" }, { w: "bone", e: "🦴" }, { w: "rain", e: "🌧️" },
+  { w: "pear", e: "🍐" }, { w: "kiwi", e: "🥝" }, { w: "taco", e: "🌮" },
+  { w: "boot", e: "🥾" }, { w: "coat", e: "🧥" }, { w: "nest", e: "🪺" },
+  { w: "fire", e: "🔥" }, { w: "ship", e: "🚢" }, { w: "wave", e: "🌊" },
 ];
 
 const ALPHABET = "abcdefghijklmnopqrstuvwxyz".split("");
@@ -470,43 +480,37 @@ function generateCaseMatch(difficulty: Difficulty): Question[] {
   return out;
 }
 
-// --- Shapes & Colors --------------------------------------------------------
+// --- Shapes -----------------------------------------------------------------
 
-const SHAPES = [
-  { name: "circle", e: "⚪" },
-  { name: "square", e: "🟦" },
-  { name: "triangle", e: "🔺" },
-  { name: "star", e: "⭐" },
-  { name: "heart", e: "❤️" },
-  { name: "diamond", e: "🔶" },
-];
-const COLORS_SET = [
-  { name: "red", e: "🔴" },
-  { name: "blue", e: "🔵" },
-  { name: "green", e: "🟢" },
-  { name: "yellow", e: "🟡" },
-  { name: "purple", e: "🟣" },
-  { name: "orange", e: "🟠" },
-];
+// Shape ids are drawn as real SVG by the UI (see ShapeGlyph in PlayGame), so
+// each shape is depicted correctly — not an approximate emoji.
+const SHAPE_POOL: Record<Difficulty, string[]> = {
+  easy: ["circle", "square", "triangle", "star", "heart"],
+  medium: ["circle", "square", "triangle", "star", "heart", "rectangle", "oval", "diamond"],
+  hard: [
+    "circle", "square", "triangle", "star", "heart", "rectangle", "oval",
+    "diamond", "pentagon", "hexagon", "crescent", "cross",
+  ],
+};
 
-function generateShapesColors(difficulty: Difficulty): Question[] {
+function generateShapes(difficulty: Difficulty): Question[] {
+  const pool = SHAPE_POOL[difficulty];
   const nChoices = difficulty === "easy" ? 3 : 4;
   const out: Question[] = [];
+  let prev = "";
   for (let i = 0; i < DEFAULT_QUESTIONS; i++) {
-    const useShape = Math.random() < 0.5;
-    const pool = useShape ? SHAPES : COLORS_SET;
-    const target = pool[randInt(0, pool.length - 1)];
-    const distractors = shuffle(pool.filter((p) => p.name !== target.name))
-      .slice(0, nChoices - 1)
-      .map((p) => p.e);
+    let target = pool[randInt(0, pool.length - 1)];
+    while (target === prev) target = pool[randInt(0, pool.length - 1)];
+    prev = target;
+    const distractors = shuffle(pool.filter((s) => s !== target)).slice(0, nChoices - 1);
     out.push({
       id: crypto.randomUUID(),
-      kind: "choice",
+      kind: "shape",
       difficulty,
-      spoken: `Find the ${target.name}${useShape ? "" : " one"}.`,
-      promptText: "🔎",
-      answer: target.e,
-      choices: shuffle([target.e, ...distractors]),
+      spoken: `Find the ${target}.`,
+      promptText: target, // the shape name (for the prompt / answer)
+      answer: target,
+      choices: shuffle([target, ...distractors]),
     });
   }
   return out;
@@ -521,13 +525,15 @@ function generateOrder(difficulty: Difficulty): Question[] {
   const out: Question[] = [];
   for (let i = 0; i < DEFAULT_QUESTIONS; i++) {
     const useNumbers = Math.random() < 0.5;
-    const picked = new Set<string>();
+    // A consecutive run, so the answer is a real sequence (3 4 5 6, not 2 4 7 9).
+    const run: string[] = [];
     if (useNumbers) {
-      while (picked.size < count) picked.add(String(randInt(1, 9)));
+      const start = randInt(1, 10 - count); // digits 1-9, run fits within
+      for (let k = 0; k < count; k++) run.push(String(start + k));
     } else {
-      while (picked.size < count) picked.add(LETTERS[randInt(0, 25)]);
+      const start = randInt(0, 26 - count);
+      for (let k = 0; k < count; k++) run.push(LETTERS[start + k]);
     }
-    const sorted = [...picked].sort();
     out.push({
       id: crypto.randomUUID(),
       kind: "spell",
@@ -536,8 +542,8 @@ function generateOrder(difficulty: Difficulty): Question[] {
         ? "Put the numbers in order, smallest first."
         : "Put the letters in A B C order.",
       promptText: useNumbers ? "🔢" : "🔤",
-      answer: sorted.join(""),
-      choices: shuffle([...picked]),
+      answer: run.join(""),
+      choices: shuffle([...run]),
     });
   }
   return out;
@@ -609,30 +615,19 @@ function generateSightWords(difficulty: Difficulty): Question[] {
 const MEMORY_PAIRS: Record<Difficulty, number> = { easy: 3, medium: 4, hard: 5 };
 const MEMORY_BOARDS = 3;
 
-function dots(n: number): string {
-  return "●".repeat(n);
-}
-
 function generateMemory(difficulty: Difficulty): Question[] {
   const nPairs = MEMORY_PAIRS[difficulty];
   const out: Question[] = [];
   for (let board = 0; board < MEMORY_BOARDS; board++) {
-    // Mix letter (upper/lower) and number (numeral/dots) pairs.
+    // Each pair is an uppercase letter with its lowercase (quick to read, so
+    // the tiles don't need to be studied before they flip back).
     const pairs: [string, string][] = [];
-    const usedL = new Set<string>();
-    const usedN = new Set<number>();
+    const used = new Set<string>();
     for (let p = 0; p < nPairs; p++) {
-      if (Math.random() < 0.5) {
-        let L = LETTERS[randInt(0, 25)];
-        while (usedL.has(L)) L = LETTERS[randInt(0, 25)];
-        usedL.add(L);
-        pairs.push([L, L.toLowerCase()]);
-      } else {
-        let n = randInt(1, 6);
-        while (usedN.has(n)) n = randInt(1, 6);
-        usedN.add(n);
-        pairs.push([String(n), dots(n)]);
-      }
+      let L = LETTERS[randInt(0, 25)];
+      while (used.has(L)) L = LETTERS[randInt(0, 25)];
+      used.add(L);
+      pairs.push([L, L.toLowerCase()]);
     }
     out.push({
       id: crypto.randomUUID(),
@@ -658,7 +653,7 @@ const MIX_GAME_IDS = [
   "number-line",
   "more-less",
   "order-it",
-  "shapes-colors",
+  "shapes",
   "story-problems",
   "read-the-word",
   "digraphs",
@@ -743,7 +738,7 @@ export const GAMES: GameDef[] = [
   { id: "number-line", subject: "math", title: "What Comes Next?", emoji: "🔟", color: "lime", generate: generateNumberLine },
   { id: "more-less", subject: "math", title: "More or Less", emoji: "⚖️", color: "orange", generate: generateCompare },
   { id: "order-it", subject: "math", title: "Put In Order", emoji: "🔢", color: "teal", generate: generateOrder },
-  { id: "shapes-colors", subject: "math", title: "Shapes & Colors", emoji: "🔷", color: "purple", generate: generateShapesColors },
+  { id: "shapes", subject: "math", title: "Shapes", emoji: "🔷", color: "purple", generate: generateShapes },
   { id: "memory-match", subject: "math", title: "Memory Match", emoji: "🃏", color: "cyan", generate: generateMemory },
   { id: "story-problems", subject: "math", title: "Story Problems", emoji: "🧮", color: "amber", generate: generateStoryProblems },
   { id: "read-the-word", subject: "reading", title: "Read the Word", emoji: "📖", color: "indigo", generate: generateReadWord },

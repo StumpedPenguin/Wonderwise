@@ -68,7 +68,8 @@ export type QuestionKind =
   | "reading"
   | "domino"
   | "hunt"
-  | "match";
+  | "match"
+  | "shape";
 
 export interface Question {
   id: string;

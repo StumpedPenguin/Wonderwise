@@ -210,6 +210,8 @@ export function PlayGame({
         <HuntQuestion key={current.id} question={current} accent={accent} onComplete={onComplete} />
       ) : current.kind === "match" ? (
         <MatchQuestion key={current.id} question={current} accent={accent} onComplete={onComplete} />
+      ) : current.kind === "shape" ? (
+        <ShapeQuestion key={current.id} question={current} accent={accent} onComplete={onComplete} />
       ) : (
         <ChoiceQuestion key={current.id} question={current} accent={accent} onComplete={onComplete} />
       )}
@@ -521,6 +523,137 @@ function ReadingQuestion({
               className={`btn-bounce rounded-3xl px-5 py-4 font-display text-xl font-bold shadow-md ${tone}`}
             >
               {choice}
+            </button>
+          );
+        })}
+      </section>
+    </>
+  );
+}
+
+// --- Shapes (real SVG, not emoji) -------------------------------------------
+
+// Each shape drawn correctly in a 100×100 viewBox, filled with currentColor.
+function ShapeGlyph({ shape, className }: { shape: string; className?: string }) {
+  const common = { fill: "currentColor" } as const;
+  let el: React.ReactNode = null;
+  switch (shape) {
+    case "circle":
+      el = <circle cx="50" cy="50" r="42" {...common} />;
+      break;
+    case "square":
+      el = <rect x="10" y="10" width="80" height="80" rx="6" {...common} />;
+      break;
+    case "rectangle":
+      el = <rect x="6" y="28" width="88" height="44" rx="6" {...common} />;
+      break;
+    case "triangle":
+      el = <polygon points="50,10 92,86 8,86" {...common} />;
+      break;
+    case "oval":
+      el = <ellipse cx="50" cy="50" rx="44" ry="28" {...common} />;
+      break;
+    case "star":
+      el = <polygon points="50,5 61,38 96,38 68,59 79,92 50,72 21,92 32,59 4,38 39,38" {...common} />;
+      break;
+    case "heart":
+      el = <path d="M50 84 L22 56 A16 16 0 1 1 50 34 A16 16 0 1 1 78 56 Z" {...common} />;
+      break;
+    case "diamond":
+      el = <polygon points="50,8 90,50 50,92 10,50" {...common} />;
+      break;
+    case "pentagon":
+      el = <polygon points="50,6 94,39 77,91 23,91 6,39" {...common} />;
+      break;
+    case "hexagon":
+      el = <polygon points="27,8 73,8 96,50 73,92 27,92 4,50" {...common} />;
+      break;
+    case "crescent":
+      el = <path d="M66 12 A40 40 0 1 0 66 88 A30 30 0 1 1 66 12 Z" {...common} />;
+      break;
+    case "cross":
+      el = (
+        <polygon
+          points="38,8 62,8 62,38 92,38 92,62 62,62 62,92 38,92 38,62 8,62 8,38 38,38"
+          {...common}
+        />
+      );
+      break;
+    default:
+      el = <circle cx="50" cy="50" r="42" {...common} />;
+  }
+  return (
+    <svg viewBox="0 0 100 100" className={className} aria-hidden>
+      {el}
+    </svg>
+  );
+}
+
+function ShapeQuestion({
+  question,
+  accent,
+  onComplete,
+}: {
+  question: Question;
+  accent: ReturnType<typeof accentFor>;
+  onComplete: (value: string) => void;
+}) {
+  const [chosen, setChosen] = useState<string | null>(null);
+  const locked = useRef(false);
+
+  useEffect(() => {
+    speak(question.spoken);
+  }, [question.spoken]);
+
+  const answeredWrong = chosen !== null && chosen !== question.answer;
+
+  function choose(value: string) {
+    if (locked.current) return;
+    locked.current = true;
+    setChosen(value);
+    window.setTimeout(() => onComplete(value), 1100);
+  }
+
+  return (
+    <>
+      <section className="mt-6 flex flex-col items-center rounded-4xl bg-white px-6 py-8 shadow-lg">
+        <button
+          type="button"
+          onClick={() => speak(question.spoken)}
+          className={`btn-bounce mb-2 inline-flex items-center gap-2 rounded-full ${accent.soft} px-4 py-2 font-display ${accent.text}`}
+        >
+          🔊 Say it again
+        </button>
+        <p className="font-display text-xl text-slate-500">Find the</p>
+        <p className={`font-display text-4xl font-bold capitalize ${accent.text}`}>
+          {question.promptText}
+        </p>
+        {answeredWrong && (
+          <p className="mt-2 font-display text-lg text-slate-500">
+            This one is a <span className="capitalize text-emerald-600">{question.answer}</span>
+          </p>
+        )}
+      </section>
+
+      <section className="mt-6 grid grid-cols-2 gap-4">
+        {question.choices.map((shape) => {
+          const isChosen = chosen === shape;
+          const isAnswer = shape === question.answer;
+          let tone = `${accent.text} ring-2 ${accent.ring}`;
+          if (chosen !== null) {
+            if (isAnswer) tone = "text-emerald-500 ring-2 ring-emerald-400";
+            else if (isChosen) tone = "text-rose-400 ring-2 ring-rose-300";
+            else tone = "text-slate-200 ring-2 ring-slate-100";
+          }
+          return (
+            <button
+              key={shape}
+              type="button"
+              disabled={chosen !== null}
+              onClick={() => choose(shape)}
+              className={`btn-bounce grid place-items-center rounded-4xl bg-white p-6 shadow-md ${tone}`}
+            >
+              <ShapeGlyph shape={shape} className="h-20 w-20" />
             </button>
           );
         })}
