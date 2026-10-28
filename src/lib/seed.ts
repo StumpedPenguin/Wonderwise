@@ -6,6 +6,7 @@ export function seedFamily(): Family {
     id: DEFAULT_FAMILY_ID,
     name: "My Family",
     ownerUserId: null,
+    parentPin: null,
     createdAt: new Date().toISOString(),
   };
 }

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { readDB, balanceOf } from "@/lib/db";
+import { readDB, balanceOf, getFamily } from "@/lib/db";
 import { requireFamily, authConfigured } from "@/lib/family";
 import { TokenBadge } from "@/components/TokenBadge";
 import { DecisionButtons } from "@/components/DecisionButtons";
@@ -7,6 +7,7 @@ import { SignOutButton } from "@/components/SignOutButton";
 import { KidEditor } from "@/components/KidEditor";
 import { PrizeEditor } from "@/components/PrizeEditor";
 import { ResetTokensButton } from "@/components/ResetTokensButton";
+import { ParentPinSettings } from "@/components/ParentPinSettings";
 import { GAMES } from "@/lib/games";
 
 export const dynamic = "force-dynamic";
@@ -15,6 +16,7 @@ export default async function ParentPage() {
   const familyId = await requireFamily();
   const signedIn = authConfigured();
   const db = await readDB(familyId);
+  const family = await getFamily(familyId);
   const childName = (id: string) =>
     db.children.find((c) => c.id === id)?.name ?? "A kid";
   const prizeById = (id: string) => db.prizes.find((p) => p.id === id);
@@ -168,6 +170,14 @@ export default async function ParentPage() {
               active: p.active,
             }))}
           />
+        </div>
+      </section>
+
+      {/* Grown-up lock */}
+      <section className="mt-8">
+        <h2 className="font-display text-2xl font-bold text-slate-600">Settings</h2>
+        <div className="mt-3">
+          <ParentPinSettings hasPin={!!family?.parentPin} />
         </div>
       </section>
 

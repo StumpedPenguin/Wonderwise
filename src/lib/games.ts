@@ -3,6 +3,7 @@ import { WORD_PROBLEMS } from "./wordProblems";
 import { READING_PROMPTS } from "./readingPrompts";
 import { DIGRAPH_WORDS, DIGRAPH_CHOICES } from "./digraphs";
 import { SIGHT_WORDS } from "./sightWords";
+import { VOWELS, CONSONANTS, VOWEL_WORDS } from "./vowels";
 import { DIZZY_MAX, DIZZY_PUZZLES, type DizzyEquation, type DizzyPuzzle } from "./dizzy";
 import { SPECIAL_COUNT, periodKey, hashString, type LessonKind } from "./lessons";
 
@@ -582,6 +583,49 @@ function generateHunt(difficulty: Difficulty): Question[] {
   return out;
 }
 
+// --- Vowels (what they are + short-vowel sounds) ----------------------------
+
+function generateVowels(difficulty: Difficulty): Question[] {
+  const out: Question[] = [];
+  let prev = "";
+  for (let i = 0; i < DEFAULT_QUESTIONS; i++) {
+    if (difficulty === "easy") {
+      // Which letter is a vowel? (learn what they are)
+      let vowel = VOWELS[randInt(0, VOWELS.length - 1)];
+      while (vowel === prev) vowel = VOWELS[randInt(0, VOWELS.length - 1)];
+      prev = vowel;
+      const set = new Set<string>([vowel.toUpperCase()]);
+      while (set.size < 4) set.add(CONSONANTS[randInt(0, CONSONANTS.length - 1)].toUpperCase());
+      out.push({
+        id: crypto.randomUUID(),
+        kind: "choice",
+        difficulty,
+        spoken: "Which letter is a vowel? A, E, I, O, and U are vowels.",
+        promptText: "🅰️",
+        answer: vowel.toUpperCase(),
+        choices: shuffle([...set]),
+      });
+    } else {
+      // Which vowel sound is in this word? (learn to sound them)
+      const w = VOWEL_WORDS[randInt(0, VOWEL_WORDS.length - 1)];
+      const masked = w.word.replace(w.vowel, "＿");
+      const nChoices = difficulty === "hard" ? 5 : 3;
+      const set = new Set<string>([w.vowel]);
+      while (set.size < nChoices) set.add(VOWELS[randInt(0, VOWELS.length - 1)]);
+      out.push({
+        id: crypto.randomUUID(),
+        kind: "choice",
+        difficulty,
+        spoken: `Which vowel is missing? The word is ${w.word}.`,
+        promptText: `${w.emoji}  ${masked}`,
+        answer: w.vowel,
+        choices: shuffle([...set]),
+      });
+    }
+  }
+  return out;
+}
+
 // --- Sight Words (Dolch word recognition) -----------------------------------
 
 function generateSightWords(difficulty: Difficulty): Question[] {
@@ -717,6 +761,7 @@ const MIX_GAME_IDS = [
   "read-the-word",
   "digraphs",
   "big-little",
+  "vowels",
   "sight-words",
   "letter-hunt",
   "build-a-word",
@@ -804,6 +849,7 @@ export const GAMES: GameDef[] = [
   { id: "read-the-word", subject: "reading", title: "Read the Word", emoji: "📖", color: "indigo", generate: generateReadWord },
   { id: "digraphs", subject: "reading", title: "Digraph Sounds", emoji: "🔤", color: "fuchsia", generate: generateDigraphs },
   { id: "big-little", subject: "reading", title: "Big & Little", emoji: "🔡", color: "pink", generate: generateCaseMatch },
+  { id: "vowels", subject: "reading", title: "Vowels", emoji: "🅰️", color: "amber", generate: generateVowels },
   { id: "sight-words", subject: "reading", title: "Sight Words", emoji: "👀", color: "indigo", generate: generateSightWords },
   { id: "letter-hunt", subject: "reading", title: "Letter Hunt", emoji: "🔍", color: "rose", generate: generateHunt },
   { id: "story-time", subject: "reading", title: "Story Time", emoji: "📚", color: "rose", generate: generateStoryTime },

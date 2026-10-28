@@ -129,7 +129,13 @@ function toContent(r: typeof schema.contentItems.$inferSelect): ContentItem {
 }
 
 function toFamily(r: typeof schema.families.$inferSelect): Family {
-  return { id: r.id, name: r.name, ownerUserId: r.ownerUserId, createdAt: iso(r.createdAt)! };
+  return {
+    id: r.id,
+    name: r.name,
+    ownerUserId: r.ownerUserId,
+    parentPin: r.parentPin ?? null,
+    createdAt: iso(r.createdAt)!,
+  };
 }
 
 function startOfToday(): Date {
@@ -459,8 +465,15 @@ export function createPgStore(): Store {
           id: family.id,
           name: family.name,
           ownerUserId: family.ownerUserId,
+          parentPin: family.parentPin ?? null,
           createdAt: new Date(family.createdAt),
         }),
+        "write",
+      );
+    },
+    async setFamilyPin(familyId, pin) {
+      await withTimeout(
+        getDb().update(schema.families).set({ parentPin: pin }).where(eq(schema.families.id, familyId)),
         "write",
       );
     },

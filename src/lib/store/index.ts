@@ -78,6 +78,8 @@ export interface Store {
   getFamily(id: string): Promise<Family | null>;
   getFamilyByOwner(ownerUserId: string): Promise<Family | null>;
   createFamily(family: Family): Promise<void>;
+  /** Set (or clear, with null) the grown-up PIN for a family. */
+  setFamilyPin(familyId: string, pin: string | null): Promise<void>;
 }
 
 // --- Pure helpers over a snapshot (used by page components) ----------------

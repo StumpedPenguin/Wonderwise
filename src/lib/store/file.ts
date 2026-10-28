@@ -226,15 +226,23 @@ export function createFileStore(): Store {
     },
     async getFamily(id) {
       const db = await read();
-      return db.families.find((f) => f.id === id) ?? null;
+      const f = db.families.find((x) => x.id === id);
+      return f ? { ...f, parentPin: f.parentPin ?? null } : null;
     },
     async getFamilyByOwner(ownerUserId) {
       const db = await read();
-      return db.families.find((f) => f.ownerUserId === ownerUserId) ?? null;
+      const f = db.families.find((x) => x.ownerUserId === ownerUserId);
+      return f ? { ...f, parentPin: f.parentPin ?? null } : null;
     },
     createFamily(family) {
       return writeOp((db) => {
         db.families.push(family);
+      });
+    },
+    setFamilyPin(familyId, pin) {
+      return writeOp((db) => {
+        const f = db.families.find((x) => x.id === familyId);
+        if (f) f.parentPin = pin;
       });
     },
   };

@@ -10,6 +10,8 @@ export interface Family {
   name: string;
   /** The auth user who owns this family (null for the pre-auth default). */
   ownerUserId: string | null;
+  /** Optional PIN that locks the grown-up zone (null = no lock). */
+  parentPin: string | null;
   createdAt: string;
 }
 

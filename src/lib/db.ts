@@ -46,3 +46,6 @@ export function getFamilyByOwner(ownerUserId: string): Promise<Family | null> {
 export function createFamily(family: Family): Promise<void> {
   return getStore().createFamily(family);
 }
+export function setFamilyPin(familyId: string, pin: string | null): Promise<void> {
+  return getStore().setFamilyPin(familyId, pin);
+}

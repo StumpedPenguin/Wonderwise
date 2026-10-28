@@ -26,6 +26,7 @@ export async function createMyFamily(formData: FormData) {
     id: familyId,
     name,
     ownerUserId: user.id,
+    parentPin: null,
     createdAt: new Date().toISOString(),
   });
 

@@ -20,6 +20,7 @@ export const families = pgTable("families", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   ownerUserId: text("owner_user_id"),
+  parentPin: text("parent_pin"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
