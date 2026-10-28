@@ -788,15 +788,18 @@ function withSeed<T>(seed: number, fn: () => T): T {
 }
 
 /**
- * Build a mixed lesson of medium/hard questions pulled from across the games.
- * Only draws from games the child can access (not hidden), so a kid never gets
- * a question type they can't play. Seeded from the period + child so it's
- * stable across retries that day/week.
+ * Build a mixed lesson pulled from across the games.
+ * - Only draws from games the child can access (not hidden).
+ * - Each game's questions use that child's adaptive level for that game
+ *   (their "Just Right" level, which moves with their performance over time).
+ *   Games they haven't played yet default to medium.
+ * Seeded from the period + child so it's stable across retries that day/week.
  */
 export function buildMixedLesson(
   kind: LessonKind,
   hiddenGameIds: string[] = [],
   salt = "",
+  skillLevels: Record<string, Difficulty> = {},
 ): Question[] {
   const count = SPECIAL_COUNT[kind];
   const hidden = new Set(hiddenGameIds);
@@ -806,13 +809,16 @@ export function buildMixedLesson(
     .map((id) => getGame(id))
     .filter((g): g is GameDef => !!g);
 
+  // The level to play each game at: the kid's recommended level, else medium.
+  const levelFor = (id: string): Difficulty => skillLevels[id] ?? "medium";
+
   const seed = hashString(`${kind}:${periodKey(kind)}:${salt}`);
   return withSeed(seed, () => {
     const out: Question[] = [];
     // Round-robin across the allowed games; regenerate a fresh set of buckets
     // if we run out before reaching the count (e.g. a kid with few games).
     for (let round = 0; out.length < count && round < 20; round++) {
-      const buckets = pool.map((g) => g.generate(Math.random() < 0.5 ? "medium" : "hard"));
+      const buckets = pool.map((g) => g.generate(levelFor(g.id)));
       const maxLen = Math.max(0, ...buckets.map((b) => b.length));
       for (let i = 0; i < maxLen && out.length < count; i++) {
         for (const b of buckets) {

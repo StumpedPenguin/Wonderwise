@@ -12,9 +12,15 @@ export async function startSession(
   const game = getGame(gameId);
   let questions: Question[] | null;
   if (game?.special) {
-    // Daily/Weekly: only pull from games this child can access (not hidden).
+    // Daily/Weekly: only pull from games this child can access (not hidden),
+    // each at that child's adaptive level for that game.
     const child = await getChild(familyId, childId);
-    questions = buildMixedLesson(game.special, child?.hiddenGames ?? [], childId);
+    questions = buildMixedLesson(
+      game.special,
+      child?.hiddenGames ?? [],
+      childId,
+      child?.skillLevels ?? {},
+    );
   } else if (gameId === "read-answer") {
     questions = await buildReadAnswer(familyId, difficulty);
   } else {
