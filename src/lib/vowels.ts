@@ -6,7 +6,7 @@ export const CONSONANTS = "bcdfghjklmnpqrstvwxyz".split("");
 
 export interface VowelWord {
   word: string;
-  emoji: string;
+  emoji?: string; // optional — no picture means the child reads from the audio
   vowel: string; // the (single) short vowel in the middle
 }
 
@@ -41,4 +41,35 @@ export const VOWEL_WORDS: VowelWord[] = [
   { word: "bug", emoji: "🐛", vowel: "u" },
   { word: "nut", emoji: "🥜", vowel: "u" },
   { word: "mug", emoji: "☕", vowel: "u" },
+  // No-picture CVC words — the child reads/sounds these out from the audio.
+  { word: "can", vowel: "a" }, { word: "cab", vowel: "a" },
+  { word: "dad", vowel: "a" }, { word: "fan", vowel: "a" },
+  { word: "ham", vowel: "a" }, { word: "jam", vowel: "a" },
+  { word: "man", vowel: "a" }, { word: "pan", vowel: "a" },
+  { word: "ran", vowel: "a" }, { word: "tap", vowel: "a" },
+  { word: "nap", vowel: "a" }, { word: "rag", vowel: "a" },
+  { word: "beg", vowel: "e" }, { word: "den", vowel: "e" },
+  { word: "get", vowel: "e" }, { word: "leg", vowel: "e" },
+  { word: "led", vowel: "e" }, { word: "met", vowel: "e" },
+  { word: "peg", vowel: "e" }, { word: "red", vowel: "e" },
+  { word: "set", vowel: "e" }, { word: "ten", vowel: "e" },
+  { word: "wet", vowel: "e" }, { word: "pet", vowel: "e" },
+  { word: "bib", vowel: "i" }, { word: "dig", vowel: "i" },
+  { word: "fin", vowel: "i" }, { word: "fit", vowel: "i" },
+  { word: "hit", vowel: "i" }, { word: "kid", vowel: "i" },
+  { word: "lid", vowel: "i" }, { word: "mix", vowel: "i" },
+  { word: "sit", vowel: "i" }, { word: "win", vowel: "i" },
+  { word: "zip", vowel: "i" }, { word: "rib", vowel: "i" },
+  { word: "cob", vowel: "o" }, { word: "cot", vowel: "o" },
+  { word: "hop", vowel: "o" }, { word: "hot", vowel: "o" },
+  { word: "job", vowel: "o" }, { word: "mob", vowel: "o" },
+  { word: "nod", vowel: "o" }, { word: "pop", vowel: "o" },
+  { word: "top", vowel: "o" }, { word: "rod", vowel: "o" },
+  { word: "cop", vowel: "o" }, { word: "jog", vowel: "o" },
+  { word: "cub", vowel: "u" }, { word: "cut", vowel: "u" },
+  { word: "fun", vowel: "u" }, { word: "gum", vowel: "u" },
+  { word: "hug", vowel: "u" }, { word: "jug", vowel: "u" },
+  { word: "mud", vowel: "u" }, { word: "rub", vowel: "u" },
+  { word: "run", vowel: "u" }, { word: "tub", vowel: "u" },
+  { word: "pup", vowel: "u" }, { word: "rug", vowel: "u" },
 ];

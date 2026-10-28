@@ -231,7 +231,7 @@ function generateDigraphs(difficulty: Difficulty): Question[] {
         kind: "choice" as const,
         difficulty,
         spoken: `The word is ${word}. Which two letters are missing?`,
-        promptText: `${emoji}  ${masked}`,
+        promptText: emoji ? `${emoji}  ${masked}` : masked,
         answer: digraph,
         choices: shuffle([digraph, ...distractors]),
       };
@@ -240,7 +240,10 @@ function generateDigraphs(difficulty: Difficulty): Question[] {
 
 // --- Words (shared by Read the Word and Build a Word) ------------------------
 
-const WORDS = [
+// Picture is optional — words without an emoji show a "listen" prompt and the
+// child reads/spells from the spoken word, so the pool isn't limited to things
+// that happen to have an emoji.
+const WORDS: { w: string; e?: string }[] = [
   // 3-letter
   { w: "cat", e: "🐱" }, { w: "dog", e: "🐶" }, { w: "sun", e: "☀️" },
   { w: "hat", e: "🎩" }, { w: "bed", e: "🛏️" }, { w: "pig", e: "🐷" },
@@ -256,6 +259,18 @@ const WORDS = [
   { w: "fly", e: "🪰" }, { w: "ice", e: "🧊" }, { w: "nut", e: "🥜" },
   { w: "log", e: "🪵" }, { w: "paw", e: "🐾" }, { w: "ski", e: "🎿" },
   { w: "tea", e: "🍵" }, { w: "ham", e: "🍖" }, { w: "eye", e: "👁️" },
+  // 3-letter, read/spell from audio (no picture needed)
+  { w: "bad" }, { w: "bun" }, { w: "cub" }, { w: "cut" }, { w: "dad" },
+  { w: "den" }, { w: "dig" }, { w: "dip" }, { w: "dot" }, { w: "fin" },
+  { w: "fit" }, { w: "gum" }, { w: "hit" }, { w: "hop" }, { w: "hug" },
+  { w: "jam" }, { w: "jet" }, { w: "job" }, { w: "jog" }, { w: "kid" },
+  { w: "lap" }, { w: "lid" }, { w: "lot" }, { w: "mad" }, { w: "mix" },
+  { w: "mom" }, { w: "mud" }, { w: "nap" }, { w: "net" }, { w: "pan" },
+  { w: "pet" }, { w: "pin" }, { w: "pit" }, { w: "pop" }, { w: "pup" },
+  { w: "red" }, { w: "rib" }, { w: "rug" }, { w: "run" }, { w: "sad" },
+  { w: "sit" }, { w: "six" }, { w: "sob" }, { w: "tag" }, { w: "tap" },
+  { w: "ten" }, { w: "tin" }, { w: "top" }, { w: "tub" }, { w: "wet" },
+  { w: "wig" }, { w: "win" }, { w: "yes" }, { w: "zip" }, { w: "zoo" },
   // 4-letter
   { w: "fish", e: "🐟" }, { w: "frog", e: "🐸" }, { w: "star", e: "⭐" },
   { w: "moon", e: "🌙" }, { w: "cake", e: "🍰" }, { w: "ball", e: "⚽" },
@@ -273,6 +288,18 @@ const WORDS = [
   { w: "pear", e: "🍐" }, { w: "kiwi", e: "🥝" }, { w: "taco", e: "🌮" },
   { w: "boot", e: "🥾" }, { w: "coat", e: "🧥" }, { w: "nest", e: "🪺" },
   { w: "fire", e: "🔥" }, { w: "ship", e: "🚢" }, { w: "wave", e: "🌊" },
+  // 4-letter, read/spell from audio (no picture needed)
+  { w: "band" }, { w: "bath" }, { w: "belt" }, { w: "best" }, { w: "bump" },
+  { w: "camp" }, { w: "cart" }, { w: "cash" }, { w: "chat" }, { w: "chip" },
+  { w: "clap" }, { w: "club" }, { w: "crop" }, { w: "desk" }, { w: "dish" },
+  { w: "dust" }, { w: "fast" }, { w: "flag" }, { w: "flat" }, { w: "gold" },
+  { w: "help" }, { w: "hill" }, { w: "hunt" }, { w: "jump" }, { w: "kind" },
+  { w: "land" }, { w: "last" }, { w: "left" }, { w: "lift" }, { w: "list" },
+  { w: "mask" }, { w: "melt" }, { w: "mint" }, { w: "mist" }, { w: "next" },
+  { w: "pond" }, { w: "pump" }, { w: "raft" }, { w: "ramp" }, { w: "rest" },
+  { w: "sand" }, { w: "sent" }, { w: "sing" }, { w: "sink" }, { w: "soft" },
+  { w: "song" }, { w: "spin" }, { w: "stop" }, { w: "swim" }, { w: "tent" },
+  { w: "test" }, { w: "vest" }, { w: "wind" }, { w: "wing" }, { w: "wish" },
 ];
 
 const ALPHABET = "abcdefghijklmnopqrstuvwxyz".split("");
@@ -294,7 +321,7 @@ function generateReadWord(difficulty: Difficulty): Question[] {
         kind: "choice" as const,
         difficulty,
         spoken: `Find the word ${w}.`,
-        promptText: e,
+        promptText: e ?? "🔊", // picture if we have one, else "listen"
         answer: w,
         choices: shuffle([w, ...distractors]),
       };
@@ -322,7 +349,7 @@ function generateSpell(difficulty: Difficulty): Question[] {
         kind: "spell" as const,
         difficulty,
         spoken: `Spell the word: ${w}!`,
-        promptText: e,
+        promptText: e ?? "🔊", // picture if we have one, else spell from the spoken word
         answer: w,
         choices: shuffle(bank),
       };
@@ -617,7 +644,7 @@ function generateVowels(difficulty: Difficulty): Question[] {
         kind: "choice",
         difficulty,
         spoken: `Which vowel is missing? The word is ${w.word}.`,
-        promptText: `${w.emoji}  ${masked}`,
+        promptText: w.emoji ? `${w.emoji}  ${masked}` : masked,
         answer: w.vowel,
         choices: shuffle([...set]),
       });
