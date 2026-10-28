@@ -30,6 +30,26 @@ export default async function Welcome() {
             placeholder="Your family name"
             className="rounded-2xl border-2 border-slate-200 px-4 py-3 text-center font-display text-lg text-slate-700 outline-none focus:border-sky-400"
           />
+
+          <div className="mt-1 rounded-2xl bg-sky-50 px-4 py-3 text-left">
+            <label htmlFor="parentPin" className="font-display text-sm font-bold text-slate-600">
+              🔒 Grown-up code
+            </label>
+            <p className="mt-0.5 text-xs text-slate-400">
+              A 4-digit code locks the grown-up zone so kids can't change things. You can
+              change it later.
+            </p>
+            <input
+              id="parentPin"
+              name="parentPin"
+              inputMode="numeric"
+              pattern="[0-9]{4}"
+              maxLength={4}
+              placeholder="4 digits"
+              className="mt-2 w-full rounded-2xl border-2 border-slate-200 px-4 py-3 text-center font-display text-xl tracking-widest text-slate-700 outline-none focus:border-sky-400"
+            />
+          </div>
+
           <button
             type="submit"
             className="btn-bounce rounded-full bg-sky-500 px-6 py-3 font-display text-lg font-bold text-white shadow-md"

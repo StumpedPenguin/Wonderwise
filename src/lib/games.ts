@@ -789,33 +789,39 @@ function withSeed<T>(seed: number, fn: () => T): T {
 
 /**
  * Build a mixed lesson of medium/hard questions pulled from across the games.
- * Seeded from the current day (daily) or week (weekly) so it rotates on its own
- * and is the same for every child in that period.
+ * Only draws from games the child can access (not hidden), so a kid never gets
+ * a question type they can't play. Seeded from the period + child so it's
+ * stable across retries that day/week.
  */
-export function buildMixedLesson(kind: LessonKind): Question[] {
+export function buildMixedLesson(
+  kind: LessonKind,
+  hiddenGameIds: string[] = [],
+  salt = "",
+): Question[] {
   const count = SPECIAL_COUNT[kind];
-  const seed = hashString(`${kind}:${periodKey(kind)}`);
+  const hidden = new Set(hiddenGameIds);
+  let allowed = MIX_GAME_IDS.filter((id) => !hidden.has(id));
+  if (allowed.length === 0) allowed = MIX_GAME_IDS; // never produce an empty lesson
+  const pool = allowed
+    .map((id) => getGame(id))
+    .filter((g): g is GameDef => !!g);
+
+  const seed = hashString(`${kind}:${periodKey(kind)}:${salt}`);
   return withSeed(seed, () => {
-    const buckets: Question[][] = [];
-    for (const id of MIX_GAME_IDS) {
-      const g = getGame(id);
-      if (!g) continue;
-      const diff: Difficulty = Math.random() < 0.5 ? "medium" : "hard";
-      buckets.push(g.generate(diff));
-    }
-    // Round-robin across games so each pass takes one question from each —
-    // a balanced, varied mix.
     const out: Question[] = [];
-    for (let i = 0; out.length < count; i++) {
-      let added = false;
-      for (const b of buckets) {
-        if (b[i] !== undefined) {
-          out.push(b[i]);
-          added = true;
-          if (out.length >= count) break;
+    // Round-robin across the allowed games; regenerate a fresh set of buckets
+    // if we run out before reaching the count (e.g. a kid with few games).
+    for (let round = 0; out.length < count && round < 20; round++) {
+      const buckets = pool.map((g) => g.generate(Math.random() < 0.5 ? "medium" : "hard"));
+      const maxLen = Math.max(0, ...buckets.map((b) => b.length));
+      for (let i = 0; i < maxLen && out.length < count; i++) {
+        for (const b of buckets) {
+          if (b[i] !== undefined) {
+            out.push(b[i]);
+            if (out.length >= count) break;
+          }
         }
       }
-      if (!added) break; // ran out of questions
     }
     return out;
   });

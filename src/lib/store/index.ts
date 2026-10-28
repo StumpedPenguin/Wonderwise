@@ -57,7 +57,11 @@ export interface Tx {
 
   // Parent admin
   upsertChild(child: Child): Promise<void>;
+  /** Soft-delete (restorable). */
   deleteChild(id: string): Promise<void>;
+  restoreChild(id: string): Promise<void>;
+  /** Permanently remove a kid and all their data. */
+  purgeChild(id: string): Promise<void>;
   upsertPrize(prize: Prize): Promise<void>;
   deletePrize(id: string): Promise<void>;
 }
@@ -73,6 +77,9 @@ export interface Store {
   addContentItems(familyId: string, items: ContentItem[]): Promise<void>;
   setContentStatus(familyId: string, id: string, status: ContentStatus): Promise<void>;
   deleteContent(familyId: string, id: string): Promise<void>;
+
+  /** Soft-deleted kids for this family (for the "recently removed" list). */
+  listRemovedChildren(familyId: string): Promise<Child[]>;
 
   // Families
   getFamily(id: string): Promise<Family | null>;

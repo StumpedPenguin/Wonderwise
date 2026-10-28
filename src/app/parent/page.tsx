@@ -8,7 +8,10 @@ import { KidEditor } from "@/components/KidEditor";
 import { PrizeEditor } from "@/components/PrizeEditor";
 import { ResetTokensButton } from "@/components/ResetTokensButton";
 import { ParentPinSettings } from "@/components/ParentPinSettings";
+import { GiveTokensButton } from "@/components/GiveTokensButton";
+import { RemovedKids } from "@/components/RemovedKids";
 import { GAMES } from "@/lib/games";
+import { listRemovedChildren } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +20,7 @@ export default async function ParentPage() {
   const signedIn = authConfigured();
   const db = await readDB(familyId);
   const family = await getFamily(familyId);
+  const removed = await listRemovedChildren(familyId);
   const childName = (id: string) =>
     db.children.find((c) => c.id === id)?.name ?? "A kid";
   const prizeById = (id: string) => db.prizes.find((p) => p.id === id);
@@ -110,17 +114,37 @@ export default async function ParentPage() {
           {db.children.map((c) => (
             <div
               key={c.id}
-              className="flex items-center justify-between rounded-4xl bg-white p-4 shadow-md"
+              className="flex flex-col gap-2 rounded-4xl bg-white p-4 shadow-md"
             >
-              <span className="flex items-center gap-2 font-display text-lg font-bold text-slate-700">
-                <span className="text-3xl">{c.avatar}</span>
-                {c.name}
-              </span>
-              <TokenBadge amount={balanceOf(db, c.id)} size="sm" />
+              <div className="flex items-center justify-between">
+                <span className="flex items-center gap-2 font-display text-lg font-bold text-slate-700">
+                  <span className="text-3xl">{c.avatar}</span>
+                  {c.name}
+                </span>
+                <TokenBadge amount={balanceOf(db, c.id)} size="sm" />
+              </div>
+              <div className="flex justify-end">
+                <GiveTokensButton childId={c.id} name={c.name} />
+              </div>
             </div>
           ))}
         </div>
       </section>
+
+      {/* Recently removed kids */}
+      {removed.length > 0 && (
+        <section className="mt-8">
+          <h2 className="font-display text-2xl font-bold text-slate-600">Recently removed</h2>
+          <p className="mt-1 text-sm text-slate-400">
+            Restore a kid (with their tokens and history), or delete forever.
+          </p>
+          <div className="mt-3">
+            <RemovedKids
+              kids={removed.map((c) => ({ id: c.id, name: c.name, avatar: c.avatar }))}
+            />
+          </div>
+        </section>
+      )}
 
       {/* Kids */}
       <section className="mt-8">

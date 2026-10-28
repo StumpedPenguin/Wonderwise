@@ -38,6 +38,7 @@ export const children = pgTable("children", {
     .$type<Record<string, "easy" | "medium" | "hard">>()
     .notNull()
     .default({}),
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

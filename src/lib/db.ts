@@ -22,6 +22,10 @@ export async function getChild(familyId: string, id: string): Promise<Child | nu
   return db.children.find((c) => c.id === id) ?? null;
 }
 
+export function listRemovedChildren(familyId: string): Promise<Child[]> {
+  return getStore().listRemovedChildren(familyId);
+}
+
 // AI reading content
 export function listContent(familyId: string, status?: ContentStatus): Promise<ContentItem[]> {
   return getStore().listContent(familyId, status);

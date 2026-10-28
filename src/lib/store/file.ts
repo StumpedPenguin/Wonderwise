@@ -63,13 +63,14 @@ function scopedSnapshot(db: FileDB, familyId: string): DB {
   const f = (x: { familyId: string }) => x.familyId === familyId;
   return {
     children: db.children
-      .filter(f)
+      .filter((c) => f(c) && !c.deletedAt)
       .map((c) => ({
         ...c,
         hiddenGames: c.hiddenGames ?? [],
         hiddenPrizes: c.hiddenPrizes ?? [],
         goalPrizeId: c.goalPrizeId ?? null,
         skillLevels: c.skillLevels ?? {},
+        deletedAt: c.deletedAt ?? null,
       })),
     ledger: db.ledger.filter(f),
     prizes: db.prizes.filter(f),
@@ -91,6 +92,7 @@ function makeTx(db: FileDB, familyId: string): Tx {
             hiddenPrizes: c.hiddenPrizes ?? [],
             goalPrizeId: c.goalPrizeId ?? null,
             skillLevels: c.skillLevels ?? {},
+            deletedAt: c.deletedAt ?? null,
           }
         : null;
     },
@@ -173,6 +175,15 @@ function makeTx(db: FileDB, familyId: string): Tx {
       else db.children[i] = child;
     },
     async deleteChild(id) {
+      // Soft delete: keep the kid (and their tokens/history), just mark removed.
+      const c = db.children.find((x) => x.id === id && inFamily(x));
+      if (c) c.deletedAt = new Date().toISOString();
+    },
+    async restoreChild(id) {
+      const c = db.children.find((x) => x.id === id && inFamily(x));
+      if (c) c.deletedAt = null;
+    },
+    async purgeChild(id) {
       if (!db.children.some((c) => c.id === id && inFamily(c))) return;
       db.children = db.children.filter((c) => c.id !== id);
       db.ledger = db.ledger.filter((e) => e.childId !== id);
@@ -223,6 +234,19 @@ export function createFileStore(): Store {
           (c) => !(c.id === id && c.familyId === familyId),
         );
       });
+    },
+    async listRemovedChildren(familyId) {
+      const db = await read();
+      return db.children
+        .filter((c) => c.familyId === familyId && c.deletedAt)
+        .map((c) => ({
+          ...c,
+          hiddenGames: c.hiddenGames ?? [],
+          hiddenPrizes: c.hiddenPrizes ?? [],
+          goalPrizeId: c.goalPrizeId ?? null,
+          skillLevels: c.skillLevels ?? {},
+          deletedAt: c.deletedAt ?? null,
+        }));
     },
     async getFamily(id) {
       const db = await read();

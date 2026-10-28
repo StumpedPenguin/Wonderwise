@@ -1,4 +1,4 @@
-import { transaction, listContent } from "./db";
+import { transaction, listContent, getChild } from "./db";
 import { getGame, buildMixedLesson } from "./games";
 import type { Difficulty, GameSession, Question } from "./types";
 
@@ -10,12 +10,16 @@ export async function startSession(
   difficulty: Difficulty,
 ): Promise<GameSession | null> {
   const game = getGame(gameId);
-  const questions =
-    game?.special
-      ? buildMixedLesson(game.special)
-      : gameId === "read-answer"
-        ? await buildReadAnswer(familyId, difficulty)
-        : (game?.generate(difficulty) ?? null);
+  let questions: Question[] | null;
+  if (game?.special) {
+    // Daily/Weekly: only pull from games this child can access (not hidden).
+    const child = await getChild(familyId, childId);
+    questions = buildMixedLesson(game.special, child?.hiddenGames ?? [], childId);
+  } else if (gameId === "read-answer") {
+    questions = await buildReadAnswer(familyId, difficulty);
+  } else {
+    questions = game?.generate(difficulty) ?? null;
+  }
 
   if (!questions || questions.length === 0) return null;
 

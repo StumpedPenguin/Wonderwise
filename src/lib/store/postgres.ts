@@ -9,7 +9,7 @@ try {
 } catch {
   /* older runtimes may not support this; ignore */
 }
-import { and, eq, gt, gte, sql } from "drizzle-orm";
+import { and, eq, gt, gte, isNotNull, isNull, sql } from "drizzle-orm";
 import * as schema from "../schema";
 import type {
   Child,
@@ -67,6 +67,7 @@ function toChild(r: typeof schema.children.$inferSelect): Child {
     hiddenPrizes: (r.hiddenPrizes as string[] | null) ?? [],
     goalPrizeId: r.goalPrizeId ?? null,
     skillLevels: (r.skillLevels as Record<string, Difficulty> | null) ?? {},
+    deletedAt: iso(r.deletedAt) ?? null,
     createdAt: iso(r.createdAt)!,
   };
 }
@@ -280,6 +281,7 @@ function makeTx(tx: Transaction, familyId: string): Tx {
           hiddenPrizes: child.hiddenPrizes ?? [],
           goalPrizeId: child.goalPrizeId ?? null,
           skillLevels: child.skillLevels ?? {},
+          deletedAt: child.deletedAt ? new Date(child.deletedAt) : null,
         })
         .onConflictDoUpdate({
           target: C.id,
@@ -292,10 +294,18 @@ function makeTx(tx: Transaction, familyId: string): Tx {
             hiddenPrizes: child.hiddenPrizes ?? [],
             goalPrizeId: child.goalPrizeId ?? null,
             skillLevels: child.skillLevels ?? {},
+            deletedAt: child.deletedAt ? new Date(child.deletedAt) : null,
           },
         });
     },
     async deleteChild(id) {
+      // Soft delete — keep the kid and their data, just mark removed.
+      await tx.update(C).set({ deletedAt: new Date() }).where(and(eq(C.id, id), eq(C.familyId, familyId)));
+    },
+    async restoreChild(id) {
+      await tx.update(C).set({ deletedAt: null }).where(and(eq(C.id, id), eq(C.familyId, familyId)));
+    },
+    async purgeChild(id) {
       await tx.delete(L).where(and(eq(L.childId, id), eq(L.familyId, familyId)));
       await tx.delete(S).where(and(eq(S.childId, id), eq(S.familyId, familyId)));
       await tx.delete(R).where(and(eq(R.childId, id), eq(R.familyId, familyId)));
@@ -351,7 +361,10 @@ export function createPgStore(): Store {
       return withTimeout(
         (async () => {
           const [children, ledger, prizes, redemptions, sessions] = await Promise.all([
-            d.select().from(schema.children).where(eq(schema.children.familyId, familyId)),
+            d
+              .select()
+              .from(schema.children)
+              .where(and(eq(schema.children.familyId, familyId), isNull(schema.children.deletedAt))),
             d.select().from(schema.ledger).where(eq(schema.ledger.familyId, familyId)),
             d.select().from(schema.prizes).where(eq(schema.prizes.familyId, familyId)),
             d.select().from(schema.redemptions).where(eq(schema.redemptions.familyId, familyId)),
@@ -423,6 +436,19 @@ export function createPgStore(): Store {
           .delete(schema.contentItems)
           .where(and(eq(schema.contentItems.id, id), eq(schema.contentItems.familyId, familyId))),
         "write",
+      );
+    },
+    listRemovedChildren(familyId) {
+      const d = getDb();
+      return withTimeout(
+        (async () => {
+          const rows = await d
+            .select()
+            .from(schema.children)
+            .where(and(eq(schema.children.familyId, familyId), isNotNull(schema.children.deletedAt)));
+          return rows.map(toChild);
+        })(),
+        "read",
       );
     },
     getFamily(id) {

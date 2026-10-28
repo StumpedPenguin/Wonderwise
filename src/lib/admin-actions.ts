@@ -66,6 +66,7 @@ export async function saveChild(input: {
         hiddenPrizes: hiddenPrizes ?? [],
         goalPrizeId: null,
         skillLevels: {},
+        deletedAt: null,
         createdAt: new Date().toISOString(),
       };
       await tx.upsertChild(child);
@@ -80,10 +81,49 @@ export async function deleteChild(id: string): Promise<AdminResult> {
   if (!(await requireParent())) return DENIED;
   const familyId = await currentFamilyId();
   return transaction(familyId, async (tx) => {
-    await tx.deleteChild(id);
+    await tx.deleteChild(id); // soft — restorable
     revalidatePath("/");
     revalidatePath("/parent");
-    return { ok: true, message: "Removed." };
+    return { ok: true, message: "Removed — you can restore them." };
+  });
+}
+
+export async function restoreChild(id: string): Promise<AdminResult> {
+  if (!(await requireParent())) return DENIED;
+  const familyId = await currentFamilyId();
+  return transaction(familyId, async (tx) => {
+    await tx.restoreChild(id);
+    revalidatePath("/");
+    revalidatePath("/parent");
+    return { ok: true, message: "Restored! 🎉" };
+  });
+}
+
+/** Permanently remove a kid and all their data (no undo). */
+export async function purgeChild(id: string): Promise<AdminResult> {
+  if (!(await requireParent())) return DENIED;
+  const familyId = await currentFamilyId();
+  return transaction(familyId, async (tx) => {
+    await tx.purgeChild(id);
+    revalidatePath("/parent");
+    return { ok: true, message: "Deleted forever." };
+  });
+}
+
+/** Add (or, with a negative amount, remove) tokens for a kid. */
+export async function giveTokens(childId: string, amount: number): Promise<AdminResult> {
+  if (!(await requireParent())) return DENIED;
+  const n = Math.round(Number(amount));
+  if (!Number.isFinite(n) || n === 0) return { ok: false, message: "Enter an amount." };
+  if (Math.abs(n) > 100000) return { ok: false, message: "That's too many." };
+  const familyId = await currentFamilyId();
+  return transaction(familyId, async (tx) => {
+    const child = await tx.getChild(childId);
+    if (!child) return { ok: false, message: "That kid no longer exists." };
+    await tx.addLedger(childId, n, n > 0 ? "Grown-up gift 🎁" : "Grown-up adjustment");
+    revalidatePath("/parent");
+    revalidatePath(`/play/${childId}`);
+    return { ok: true, message: n > 0 ? `Gave ${n} 🪙` : `Removed ${-n} 🪙` };
   });
 }
 

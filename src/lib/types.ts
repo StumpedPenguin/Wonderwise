@@ -31,6 +31,8 @@ export interface Child {
   goalPrizeId: string | null;
   /** Adaptive difficulty: the recommended level per game, nudged by results. */
   skillLevels: Record<string, Difficulty>;
+  /** When set, the kid is soft-deleted (hidden but restorable). */
+  deletedAt: string | null;
   createdAt: string;
 }
 

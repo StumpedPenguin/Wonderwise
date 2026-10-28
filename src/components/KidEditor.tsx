@@ -105,7 +105,7 @@ function KidRow({
 
   function remove() {
     if (!kid) return;
-    if (!confirm(`Remove ${kid.name}? This also clears their tokens and history.`)) return;
+    if (!confirm(`Remove ${kid.name}? You can restore them later from "Recently removed".`)) return;
     start(async () => {
       await deleteChild(kid.id);
       router.refresh();
